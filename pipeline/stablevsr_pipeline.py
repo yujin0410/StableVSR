@@ -40,6 +40,7 @@ from diffusers.utils.torch_utils import randn_tensor, is_compiled_module
 from diffusers.pipelines import DiffusionPipeline
 from diffusers.pipelines.controlnet import MultiControlNetModel
 import util.flow_utils as of
+from util.frequency_utils import process_freq_cond
 from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput, StableDiffusionSafetyChecker
 
 
@@ -712,6 +713,23 @@ class StableVSRPipeline(
             backward_flows.append(bflow)
         backward_flows.reverse()
         return forward_flows, backward_flows
+
+    def compute_freq_conds(self, dtcwt_model, image_list, flow_list, target_dtype):
+        """
+        Pre-compute per-pair SFT conditioning. For each index k, builds the
+        freq_cond that should be active when processing image_list[k + 1]
+        (with image_list[k] warped to its coordinate via flow_list[k]).
+        """
+        freq_conds = []
+        for k in range(len(flow_list)):
+            cur = image_list[k + 1].to(dtype=torch.float32)
+            prev = image_list[k].to(dtype=torch.float32)
+            prev_warped = of.flow_warp(prev, flow_list[k])
+            _, Yh_cur = dtcwt_model(cur)
+            _, Yh_prev_w = dtcwt_model(prev_warped)
+            fc = process_freq_cond(Yh_cur, Yh_prev_w, target_level=0)
+            freq_conds.append(fc.to(dtype=target_dtype))
+        return freq_conds
         
 
     @torch.no_grad()
@@ -742,7 +760,9 @@ class StableVSRPipeline(
         control_guidance_end: Union[float, List[float]] = 1.0,
         of_model = None,
         of_rescale_factor: int = 1,
-        timesteps_to_be_used: Optional[List[float]] = None
+        timesteps_to_be_used: Optional[List[float]] = None,
+        dtcwt_model = None,
+        unet_with_sft = None,
     ):
         r"""
         The call function to the pipeline for generation.
@@ -957,6 +977,19 @@ class StableVSRPipeline(
         # 8. Denoising loop
         forward_flows, backward_flows = self.compute_flows(of_model, upscaled_images, rescale_factor=of_rescale_factor)
         interp_mode = 'bilinear' if of_rescale_factor == 1 else 'nearest'
+
+        # 8.1 Pre-compute SFT frequency conditioning for both scan directions.
+        # LR frames don't change during denoising, so these are static per frame pair.
+        sft_enabled = (dtcwt_model is not None) and (unet_with_sft is not None) and (len(images) > 1)
+        if sft_enabled:
+            freq_conds_fwd = self.compute_freq_conds(
+                dtcwt_model, images, forward_flows, target_dtype=prompt_embeds.dtype
+            )
+            freq_conds_bwd = self.compute_freq_conds(
+                dtcwt_model, list(reversed(images)), backward_flows, target_dtype=prompt_embeds.dtype
+            )
+        else:
+            freq_conds_fwd = freq_conds_bwd = None
         
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         with self.progress_bar(total=len(timesteps)*len(images)) as progress_bar:
@@ -965,6 +998,7 @@ class StableVSRPipeline(
             # for t, for image --> frame wise sampling
             for i, t in enumerate(timesteps):
                 flows = forward_flows if not reversed else backward_flows
+                freq_conds = (freq_conds_fwd if not reversed else freq_conds_bwd) if sft_enabled else None
                 for num_image, data in enumerate(images):
                     image = data
 
@@ -1021,17 +1055,30 @@ class StableVSRPipeline(
                             down_block_res_samples = [torch.cat([torch.zeros_like(d), d]) for d in down_block_res_samples]
                             mid_block_res_sample = torch.cat([torch.zeros_like(mid_block_res_sample), mid_block_res_sample])
                     
-                    # predict the noise residual
-                    noise_pred = self.unet(
-                        latent_model_input,
-                        t,
-                        encoder_hidden_states=prompt_embeds,
-                        # class_labels = noise_level,
-                        cross_attention_kwargs=cross_attention_kwargs,
-                        down_block_additional_residuals=down_block_res_samples,
-                        mid_block_additional_residual=mid_block_res_sample,
-                        return_dict=False,
-                    )[0]
+                    # SFT conditioning injection: hook fires iff unet_with_sft.current_cond is set.
+                    if sft_enabled and num_image > 0:
+                        fc = freq_conds[num_image - 1]
+                        if do_classifier_free_guidance:
+                            fc = torch.cat([fc] * 2)
+                        unet_with_sft.current_cond = fc
+                    elif unet_with_sft is not None:
+                        unet_with_sft.current_cond = None
+
+                    try:
+                        # predict the noise residual
+                        noise_pred = self.unet(
+                            latent_model_input,
+                            t,
+                            encoder_hidden_states=prompt_embeds,
+                            # class_labels = noise_level,
+                            cross_attention_kwargs=cross_attention_kwargs,
+                            down_block_additional_residuals=down_block_res_samples,
+                            mid_block_additional_residual=mid_block_res_sample,
+                            return_dict=False,
+                        )[0]
+                    finally:
+                        if unet_with_sft is not None:
+                            unet_with_sft.current_cond = None
 
                     # perform guidance
                     if do_classifier_free_guidance:

@@ -77,7 +77,7 @@ def image_grid(imgs, rows, cols):
     return grid
 
 
-def log_validation(vae, text_encoder, tokenizer, unet, controlnet, args, accelerator, weight_dtype, step, of_model):
+def log_validation(vae, text_encoder, tokenizer, unet, controlnet, args, accelerator, weight_dtype, step, of_model, dtcwt_model=None, unet_with_sft=None):
     logger.info("Running validation... ")
 
     controlnet = accelerator.unwrap_model(controlnet)
@@ -138,6 +138,7 @@ def log_validation(vae, text_encoder, tokenizer, unet, controlnet, args, acceler
             # with torch.autocast("cuda"):
             image = pipeline(
                 validation_prompt, frames, num_inference_steps=50, generator=generator, of_model=of_model,
+                dtcwt_model=dtcwt_model, unet_with_sft=unet_with_sft,
                 guidance_scale=0
             ).images
         images = [x[0] for x in image]
@@ -1093,7 +1094,9 @@ def main(args):
                             accelerator,
                             weight_dtype,
                             global_step,
-                            of_model
+                            of_model,
+                            dtcwt_model=dtcwt_model,
+                            unet_with_sft=unet_with_sft,
                         )
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
