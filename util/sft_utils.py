@@ -24,7 +24,11 @@ class SFTAdapter(nn.Module):
 
     def forward(self, x, cond):
         if cond.shape[-2:] != x.shape[-2:]:
-            cond = F.interpolate(cond, size=x.shape[-2:], mode='bilinear', align_corners=False)
+            # torch 2.0 bilinear upsample CUDA kernel has no bf16 path; round-trip fp32.
+            orig_dtype = cond.dtype
+            cond = F.interpolate(
+                cond.float(), size=x.shape[-2:], mode='bilinear', align_corners=False
+            ).to(orig_dtype)
 
         c = self.cond_conv(cond)
         gamma = self.gamma(c)
