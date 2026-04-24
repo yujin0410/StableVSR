@@ -1095,9 +1095,13 @@ def main(args):
                     ).sample
 
                 # Step 2: optical flow + warp (fp32 — torch 2.0 grid_sample has no bf16 CUDA kernel)
+                # f_flow is HR (512x512); warp HR tensors then downscale for the LR freq path.
                 f_flow = get_flow(of_model, upscaled_lq_cur.float(), upscaled_lq_prev.float())
                 warped_approximated_x0 = flow_warp(approximated_x0_rgb_prev.float(), f_flow)
-                lq_prev_warped = flow_warp(lq_prev.float(), f_flow)
+                upscaled_lq_prev_warped = flow_warp(upscaled_lq_prev.float(), f_flow)
+                lq_prev_warped = F.interpolate(
+                    upscaled_lq_prev_warped, scale_factor=0.25, mode='bicubic'
+                )
 
                 # Step 3: frequency conditioning (DTCWT runs in fp32 for stability)
                 with torch.no_grad():
