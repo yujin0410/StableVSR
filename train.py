@@ -60,6 +60,7 @@ from scheduler.ddpm_scheduler import DDPMScheduler
 
 from util.frequency_utils import DTCWTForward, process_freq_cond, wavelet_magnitude_loss
 from util.sft_utils import SFTAdapter, UNetWithSFT
+from util.metrics import VSRMetrics
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.21.0.dev0")
@@ -119,9 +120,21 @@ def log_validation(vae, text_encoder, tokenizer, unet, controlnet, args, acceler
             "number of `args.validation_image` and `args.validation_prompt` should be checked in `parse_args`"
         )
 
+    gts_provided = getattr(args, "validation_gt_image", None) is not None
+    if gts_provided:
+        if len(args.validation_gt_image) != len(validation_images):
+            logger.warn(
+                f"--validation_gt_image count ({len(args.validation_gt_image)}) does not match "
+                f"validation_image count ({len(validation_images)}); skipping metrics."
+            )
+            gts_provided = False
+    validation_gts = args.validation_gt_image if gts_provided else [None] * len(validation_images)
+
+    metrics = VSRMetrics(accelerator.device) if gts_provided else None
+
     image_logs = []
 
-    for validation_prompt, validation_image in zip(validation_prompts, validation_images):
+    for validation_prompt, validation_image, validation_gt in zip(validation_prompts, validation_images, validation_gts):
         frames = validation_image.split(';')
         for i, frame in enumerate(frames):
             frame = Image.open(frame).convert("RGB")
@@ -146,6 +159,29 @@ def log_validation(vae, text_encoder, tokenizer, unet, controlnet, args, acceler
         image_logs.append(
             {"images": images}
         )
+
+        if metrics is not None and validation_gt is not None:
+            gt_paths = validation_gt.split(';')
+            if len(gt_paths) != len(images):
+                logger.warn(
+                    f"gt frame count ({len(gt_paths)}) != pred frame count ({len(images)}); skipping this sample."
+                )
+                continue
+            to_tensor = transforms.ToTensor()
+            for pred_pil, gt_path in zip(images, gt_paths):
+                gt_pil = Image.open(gt_path).convert("RGB")
+                # Match pred resolution (pred is 4x of the 128x128 center crop = 512x512)
+                if gt_pil.size != pred_pil.size:
+                    gt_pil = gt_pil.resize(pred_pil.size, Image.BICUBIC)
+                pred_t = to_tensor(pred_pil).unsqueeze(0)
+                gt_t = to_tensor(gt_pil).unsqueeze(0)
+                metrics.update(pred_t, gt_t)
+
+    if metrics is not None:
+        scores = metrics.compute()
+        logger.info(f"Validation metrics @ step {step}: {scores}")
+        accelerator.log({f"val/{k}": v for k, v in scores.items()}, step=step)
+        metrics.reset()
 
     for tracker in accelerator.trackers:
         if tracker.name == "tensorboard":
@@ -541,6 +577,16 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
+        "--validation_gt_image",
+        type=str,
+        default=None,
+        nargs="+",
+        help=(
+            "Optional. Semicolon-separated HR ground-truth frame paths matching"
+            " --validation_image entries. When provided, PSNR/SSIM/LPIPS are computed and logged."
+        ),
+    )
+    parser.add_argument(
         "--num_validation_images",
         type=int,
         default=1,
@@ -604,6 +650,42 @@ def parse_args(input_args=None):
         )
 
     return args
+
+def log_param_counts(accelerator, modules):
+    """Log total / trainable parameter count per named module (main process only)."""
+    if not accelerator.is_main_process:
+        return
+    header = f"{'module':<20s} {'total':>14s} {'trainable':>14s}"
+    logger.info("===== Parameter counts =====")
+    logger.info(header)
+    logger.info("-" * len(header))
+    grand_total = 0
+    grand_trainable = 0
+    for name, module in modules.items():
+        if module is None:
+            continue
+        total = sum(p.numel() for p in module.parameters())
+        trainable = sum(p.numel() for p in module.parameters() if p.requires_grad)
+        grand_total += total
+        grand_trainable += trainable
+        logger.info(f"{name:<20s} {total:>14,d} {trainable:>14,d}")
+    logger.info("-" * len(header))
+    logger.info(f"{'TOTAL':<20s} {grand_total:>14,d} {grand_trainable:>14,d}")
+
+
+def log_sft_summary(accelerator, sft_adapter, latent_h=64, latent_w=64):
+    """torchinfo summary for SFTAdapter (trainable component we actually care about)."""
+    if not accelerator.is_main_process:
+        return
+    try:
+        from torchinfo import summary
+        cond = torch.zeros(1, 36, latent_h, latent_w, device=accelerator.device)
+        x = torch.zeros(1, 320, latent_h, latent_w, device=accelerator.device)
+        logger.info("===== SFTAdapter (torchinfo) =====")
+        logger.info(str(summary(sft_adapter, input_data=[x, cond], verbose=0)))
+    except Exception as e:
+        logger.warn(f"torchinfo summary failed: {e}")
+
 
 def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
@@ -875,6 +957,19 @@ def main(args):
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
+    log_param_counts(
+        accelerator,
+        {
+            "unet (frozen)": unet,
+            "vae (frozen)": vae,
+            "text_encoder (frozen)": text_encoder,
+            "of_model (frozen)": of_model,
+            "controlnet": accelerator.unwrap_model(controlnet),
+            "sft_adapter": accelerator.unwrap_model(sft_adapter),
+        },
+    )
+    log_sft_summary(accelerator, accelerator.unwrap_model(sft_adapter))
+
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num batches each epoch = {len(train_dataloader)}")
@@ -1032,7 +1127,7 @@ def main(args):
                     target = noise_scheduler.get_velocity(latents, noise, timesteps)
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                loss_mse = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
                 # Wavelet magnitude loss in latent space (approx-x0 vs gt latents)
                 approximated_x0_latent = noise_scheduler.get_approximated_x0(
@@ -1042,12 +1137,13 @@ def main(args):
                 with torch.no_grad():
                     _, Yh_gt = dtcwt_model(latents.float())
                 loss_wav = wavelet_magnitude_loss(Yh_pred, Yh_gt)
-                loss = loss + 0.1 * loss_wav
+                loss = loss_mse + 0.1 * loss_wav
 
                 accelerator.backward(loss)
+                grad_norm = None
                 if accelerator.sync_gradients:
                     params_to_clip = list(controlnet.parameters()) + list(sft_adapter.parameters())
-                    accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                    grad_norm = accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=args.set_grads_to_none)
@@ -1099,8 +1195,15 @@ def main(args):
                             unet_with_sft=unet_with_sft,
                         )
 
-            logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
-            progress_bar.set_postfix(**logs)
+            logs = {
+                "train/loss_total": loss.detach().item(),
+                "train/loss_mse": loss_mse.detach().item(),
+                "train/loss_wav": loss_wav.detach().item(),
+                "lr": lr_scheduler.get_last_lr()[0],
+            }
+            if grad_norm is not None:
+                logs["train/grad_norm"] = grad_norm.item() if torch.is_tensor(grad_norm) else float(grad_norm)
+            progress_bar.set_postfix(loss=logs["train/loss_total"], lr=logs["lr"])
             accelerator.log(logs, step=global_step)
 
             if global_step >= args.max_train_steps:
