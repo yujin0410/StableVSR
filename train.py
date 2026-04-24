@@ -1026,7 +1026,7 @@ def main(args):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(controlnet, sft_adapter):
                 # Prepare images
-                lq = batch['lq'] 
+                lq = batch['lq']
                 gt = batch['gt']
                 gt = 2 * gt - 1
                 lq = 2 * lq - 1
@@ -1043,6 +1043,12 @@ def main(args):
                 gt = gt[:, t // 2, ...]
                 lq = lq[:, t // 2, ...]
                 upscaled_lq_cur = upscaled_lq[:, t // 2, ...]
+
+                # Match dtype of frozen models (bf16/fp16) so mixed-precision forward works.
+                lq = lq.to(dtype=weight_dtype)
+                lq_prev = lq_prev.to(dtype=weight_dtype)
+                upscaled_lq_cur = upscaled_lq_cur.to(dtype=weight_dtype)
+                upscaled_lq_prev = upscaled_lq_prev.to(dtype=weight_dtype)
 
                 # Convert images to latent space
                 latents = vae.encode(gt.to(dtype=weight_dtype)).latent_dist.sample()
