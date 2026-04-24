@@ -931,7 +931,8 @@ def main(args):
     vae.to(accelerator.device, dtype=weight_dtype)
     unet.to(accelerator.device, dtype=weight_dtype)
     text_encoder.to(accelerator.device, dtype=weight_dtype)
-    of_model.to(accelerator.device, dtype=weight_dtype)
+    # Keep RAFT in fp32: torch 2.0 grid_sampler_2d_cuda does not support bf16/fp16.
+    of_model.to(accelerator.device)
     # Keep DTCWT in fp32 for numerical stability; it's frozen so cost is negligible.
     dtcwt_model.to(accelerator.device, dtype=torch.float32)
 
@@ -1044,11 +1045,11 @@ def main(args):
                 lq = lq[:, t // 2, ...]
                 upscaled_lq_cur = upscaled_lq[:, t // 2, ...]
 
-                # Match dtype of frozen models (bf16/fp16) so mixed-precision forward works.
+                # Match UNet weight dtype (bf16/fp16) before cat with noisy_latents.
+                # upscaled_lq_* stay fp32: they feed RAFT which uses CUDA grid_sample
+                # (no bf16 kernel in torch 2.0).
                 lq = lq.to(dtype=weight_dtype)
                 lq_prev = lq_prev.to(dtype=weight_dtype)
-                upscaled_lq_cur = upscaled_lq_cur.to(dtype=weight_dtype)
-                upscaled_lq_prev = upscaled_lq_prev.to(dtype=weight_dtype)
 
                 # Convert images to latent space
                 latents = vae.encode(gt.to(dtype=weight_dtype)).latent_dist.sample()
@@ -1093,10 +1094,10 @@ def main(args):
                         approximated_x0_latent_prev / vae.config.scaling_factor
                     ).sample
 
-                # Step 2: optical flow + warp
-                f_flow = get_flow(of_model, upscaled_lq_cur, upscaled_lq_prev)
-                warped_approximated_x0 = flow_warp(approximated_x0_rgb_prev, f_flow)
-                lq_prev_warped = flow_warp(lq_prev, f_flow)
+                # Step 2: optical flow + warp (fp32 — torch 2.0 grid_sample has no bf16 CUDA kernel)
+                f_flow = get_flow(of_model, upscaled_lq_cur.float(), upscaled_lq_prev.float())
+                warped_approximated_x0 = flow_warp(approximated_x0_rgb_prev.float(), f_flow)
+                lq_prev_warped = flow_warp(lq_prev.float(), f_flow)
 
                 # Step 3: frequency conditioning (DTCWT runs in fp32 for stability)
                 with torch.no_grad():
