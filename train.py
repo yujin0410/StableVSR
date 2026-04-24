@@ -58,6 +58,9 @@ from diffusers.utils import check_min_version
 from diffusers.utils.import_utils import is_xformers_available
 from scheduler.ddpm_scheduler import DDPMScheduler
 
+from util.frequency_utils import DTCWTForward, process_freq_cond, wavelet_magnitude_loss
+from util.sft_utils import SFTAdapter, UNetWithSFT
+
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.21.0.dev0")
 
@@ -686,44 +689,55 @@ def main(args):
         controlnet = ControlNetModel.from_pretrained(args.controlnet_model_name_or_path)
     else:
         logger.info("Initializing controlnet weights from unet")
-        controlnet = ControlNetModel.from_unet(unet, conditioning_embedding_out_channels=(64,128,256,)) 
+        controlnet = ControlNetModel.from_unet(unet, conditioning_embedding_out_channels=(64,128,256,))
+
+    sft_adapter = SFTAdapter(cond_channels=36, feature_channels=320)
+    unet_with_sft = UNetWithSFT(unet, sft_adapter)
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
         def save_model_hook(models, weights, output_dir):
-            i = len(weights) - 1
-
-            while len(weights) > 0:
+            while len(models) > 0:
+                model = models.pop()
                 weights.pop()
-                model = models[i]
 
-                sub_dir = "controlnet"
-                model.save_pretrained(os.path.join(output_dir, sub_dir))
-
-                i -= 1
+                unwrapped = accelerator.unwrap_model(model)
+                if isinstance(unwrapped, ControlNetModel):
+                    unwrapped.save_pretrained(os.path.join(output_dir, "controlnet"))
+                elif isinstance(unwrapped, SFTAdapter):
+                    torch.save(unwrapped.state_dict(), os.path.join(output_dir, "sft_adapter.bin"))
 
         def load_model_hook(models, input_dir):
             while len(models) > 0:
-                # pop models so that they are not loaded again
                 model = models.pop()
+                unwrapped = accelerator.unwrap_model(model)
 
-                # load diffusers style into model
-                load_model = ControlNetModel.from_pretrained(input_dir, subfolder="controlnet")
-                model.register_to_config(**load_model.config)
-
-                model.load_state_dict(load_model.state_dict())
-                del load_model
+                if isinstance(unwrapped, ControlNetModel):
+                    load_model = ControlNetModel.from_pretrained(input_dir, subfolder="controlnet")
+                    unwrapped.register_to_config(**load_model.config)
+                    unwrapped.load_state_dict(load_model.state_dict())
+                    del load_model
+                elif isinstance(unwrapped, SFTAdapter):
+                    sft_path = os.path.join(input_dir, "sft_adapter.bin")
+                    if os.path.isfile(sft_path):
+                        unwrapped.load_state_dict(torch.load(sft_path, map_location="cpu"))
+                    else:
+                        logger.warn(f"sft_adapter.bin not found in {input_dir}; skipping SFT load.")
 
         accelerator.register_save_state_pre_hook(save_model_hook)
         accelerator.register_load_state_pre_hook(load_model_hook)
 
     of_model = raft_large(weights=Raft_Large_Weights.DEFAULT)
+    dtcwt_model = DTCWTForward(J=3, biort='near_sym_a', qshift='qshift_a')
+
     of_model.requires_grad_(False)
+    dtcwt_model.requires_grad_(False)
     vae.requires_grad_(False)
     unet.requires_grad_(False)
     text_encoder.requires_grad_(False)
     controlnet.train()
+    sft_adapter.train()
 
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
@@ -777,7 +791,7 @@ def main(args):
         optimizer_class = torch.optim.AdamW
 
     # Optimizer creation
-    params_to_optimize = controlnet.parameters()
+    params_to_optimize = list(controlnet.parameters()) + list(sft_adapter.parameters())
     optimizer = optimizer_class(
         params_to_optimize,
         lr=args.learning_rate,
@@ -816,9 +830,11 @@ def main(args):
     )
 
     # Prepare everything with our `accelerator`.
-    controlnet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        controlnet, optimizer, train_dataloader, lr_scheduler
+    controlnet, sft_adapter, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+        controlnet, sft_adapter, optimizer, train_dataloader, lr_scheduler
     )
+    # Re-bind the (possibly DDP-wrapped) sft_adapter so the hook uses the prepared module.
+    unet_with_sft.sft_adapter = sft_adapter
 
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
@@ -833,6 +849,8 @@ def main(args):
     unet.to(accelerator.device, dtype=weight_dtype)
     text_encoder.to(accelerator.device, dtype=weight_dtype)
     of_model.to(accelerator.device, dtype=weight_dtype)
+    # Keep DTCWT in fp32 for numerical stability; it's frozen so cost is negligible.
+    dtcwt_model.to(accelerator.device, dtype=torch.float32)
 
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
@@ -910,7 +928,7 @@ def main(args):
         encoder_hidden_states = text_encoder(tokenization.input_ids.to(accelerator.device))[0]
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
-            with accelerator.accumulate(controlnet):
+            with accelerator.accumulate(controlnet, sft_adapter):
                 # Prepare images
                 lq = batch['lq'] 
                 gt = batch['gt']
@@ -959,42 +977,54 @@ def main(args):
                 noisy_latents_prev_cat = torch.cat([noisy_latents_prev, lq_prev], dim=1)
                 # noise_level = torch.cat([torch.tensor([20], dtype=torch.long, device=accelerator.device)] * b)
 
-                model_pred_prev = unet(
-                    noisy_latents_prev_cat,
-                    timesteps,
-                    # class_labels = noise_level,
-                    encoder_hidden_states=encoder_hidden_states.detach()
-                ).sample
-                approximated_x0_latent_prev = noise_scheduler.get_approximated_x0(model_pred_prev, timesteps, noisy_latents_prev)
-                approximated_x0_rgb_prev = vae.decode(approximated_x0_latent_prev / vae.config.scaling_factor).sample
+                # Step 1: predict previous frame (no SFT, current_cond stays None so hook is a no-op)
+                with torch.no_grad():
+                    model_pred_prev = unet(
+                        noisy_latents_prev_cat,
+                        timesteps,
+                        encoder_hidden_states=encoder_hidden_states.detach()
+                    ).sample
+                    approximated_x0_latent_prev = noise_scheduler.get_approximated_x0(
+                        model_pred_prev, timesteps, noisy_latents_prev
+                    )
+                    approximated_x0_rgb_prev = vae.decode(
+                        approximated_x0_latent_prev / vae.config.scaling_factor
+                    ).sample
 
-                # latents_prev_warped = compute_of_and_warp(of_model, upscaled_lq_cur, upscaled_lq_prev, latents_prev)
-                # controlnet_image = latents_prev_warped.to(dtype=weight_dtype)
+                # Step 2: optical flow + warp
                 f_flow = get_flow(of_model, upscaled_lq_cur, upscaled_lq_prev)
                 warped_approximated_x0 = flow_warp(approximated_x0_rgb_prev, f_flow)
-                controlnet_image = warped_approximated_x0.to(dtype=weight_dtype).detach()
+                lq_prev_warped = flow_warp(lq_prev, f_flow)
 
+                # Step 3: frequency conditioning (DTCWT runs in fp32 for stability)
+                with torch.no_grad():
+                    _, Yh_cur = dtcwt_model(lq.float())
+                    _, Yh_prev_w = dtcwt_model(lq_prev_warped.float())
+                    freq_cond = process_freq_cond(Yh_cur, Yh_prev_w, target_level=0)
+
+                # Step 4: ControlNet forward (warped approx-x0 as conditioning)
+                controlnet_image = warped_approximated_x0.to(dtype=weight_dtype).detach()
                 down_block_res_samples, mid_block_res_sample = controlnet(
                     noisy_latents_cat,
                     timesteps,
-                    # class_labels = noise_level,
                     encoder_hidden_states=encoder_hidden_states.detach(),
                     controlnet_cond=controlnet_image,
                     return_dict=False,
                 )
-                
-                # Predict the noise residual
-                model_pred = unet(
+
+                # Step 5: UNet forward with SFT (single call)
+                model_pred = unet_with_sft(
                     noisy_latents_cat,
                     timesteps,
-                    # class_labels = noise_level,
                     encoder_hidden_states=encoder_hidden_states.detach(),
+                    sft_cond=freq_cond.to(dtype=weight_dtype),
                     down_block_additional_residuals=[
                         sample.to(dtype=weight_dtype) for sample in down_block_res_samples
                     ],
                     mid_block_additional_residual=mid_block_res_sample.to(dtype=weight_dtype),
                 ).sample
-                # Get the target for loss depending on the prediction type
+
+                # Step 6: targets and losses
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise
                 elif noise_scheduler.config.prediction_type == "v_prediction":
@@ -1003,9 +1033,19 @@ def main(args):
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
+                # Wavelet magnitude loss in latent space (approx-x0 vs gt latents)
+                approximated_x0_latent = noise_scheduler.get_approximated_x0(
+                    model_pred, timesteps, noisy_latents
+                )
+                _, Yh_pred = dtcwt_model(approximated_x0_latent.float())
+                with torch.no_grad():
+                    _, Yh_gt = dtcwt_model(latents.float())
+                loss_wav = wavelet_magnitude_loss(Yh_pred, Yh_gt)
+                loss = loss + 0.1 * loss_wav
+
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
-                    params_to_clip = controlnet.parameters()
+                    params_to_clip = list(controlnet.parameters()) + list(sft_adapter.parameters())
                     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()

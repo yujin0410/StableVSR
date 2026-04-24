@@ -1,0 +1,59 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class SFTAdapter(nn.Module):
+    def __init__(self, cond_channels, feature_channels):
+        super().__init__()
+
+        self.cond_conv = nn.Sequential(
+            nn.Conv2d(cond_channels, 128, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.Conv2d(128, feature_channels, kernel_size=3, padding=1),
+        )
+
+        self.gamma = nn.Conv2d(feature_channels, feature_channels, kernel_size=1)
+        self.beta = nn.Conv2d(feature_channels, feature_channels, kernel_size=1)
+
+        # Zero-init so SFT starts as identity (x * 1 + 0 == x)
+        nn.init.zeros_(self.gamma.weight)
+        nn.init.zeros_(self.gamma.bias)
+        nn.init.zeros_(self.beta.weight)
+        nn.init.zeros_(self.beta.bias)
+
+    def forward(self, x, cond):
+        if cond.shape[-2:] != x.shape[-2:]:
+            cond = F.interpolate(cond, size=x.shape[-2:], mode='bilinear', align_corners=False)
+
+        c = self.cond_conv(cond)
+        gamma = self.gamma(c)
+        beta = self.beta(c)
+
+        return x * (1 + gamma) + beta
+
+
+class UNetWithSFT(nn.Module):
+    def __init__(self, unet, sft_adapter):
+        super().__init__()
+        self.unet = unet
+        self.sft_adapter = sft_adapter
+        self.current_cond = None
+
+        self.unet.up_blocks[3].register_forward_hook(self._sft_hook)
+
+    def _sft_hook(self, module, input, output):
+        if self.current_cond is None:
+            return output
+
+        if isinstance(output, tuple):
+            h = self.sft_adapter(output[0], self.current_cond)
+            return (h,) + output[1:]
+        return self.sft_adapter(output, self.current_cond)
+
+    def forward(self, noisy_latents, timesteps, encoder_hidden_states, sft_cond=None, **kwargs):
+        self.current_cond = sft_cond
+        try:
+            return self.unet(noisy_latents, timesteps, encoder_hidden_states, **kwargs)
+        finally:
+            self.current_cond = None
