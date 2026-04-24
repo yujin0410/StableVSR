@@ -687,6 +687,29 @@ def log_sft_summary(accelerator, sft_adapter, feature_channels, cond_channels=36
         logger.warn(f"torchinfo summary failed: {e}")
 
 
+_NAN_DEBUG = os.environ.get("DEBUG_NAN", "0") == "1"
+
+
+def _check_finite(name, t):
+    """Raise immediately if t contains NaN/Inf. No-op unless DEBUG_NAN=1."""
+    if not _NAN_DEBUG:
+        return
+    if t is None:
+        return
+    if torch.is_tensor(t):
+        if not torch.isfinite(t).all():
+            n_nan = torch.isnan(t).sum().item()
+            n_inf = torch.isinf(t).sum().item()
+            raise RuntimeError(
+                f"[NaN-DEBUG] non-finite at '{name}': "
+                f"shape={tuple(t.shape)} dtype={t.dtype} nan={n_nan} inf={n_inf} "
+                f"min={t.float().min().item()} max={t.float().max().item()}"
+            )
+    elif isinstance(t, (list, tuple)):
+        for i, x in enumerate(t):
+            _check_finite(f"{name}[{i}]", x)
+
+
 def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
     pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
@@ -1040,6 +1063,8 @@ def main(args):
                 # Prepare images
                 lq = batch['lq']
                 gt = batch['gt']
+                _check_finite("batch.lq", lq)
+                _check_finite("batch.gt", gt)
                 gt = 2 * gt - 1
                 lq = 2 * lq - 1
                 b, t, _, _, _ = lq.shape
@@ -1067,6 +1092,8 @@ def main(args):
                 latents = latents * vae.config.scaling_factor
                 latents_prev = vae.encode(gt_prev.to(dtype=weight_dtype)).latent_dist.sample()
                 latents_prev = latents_prev * vae.config.scaling_factor
+                _check_finite("vae.latents", latents)
+                _check_finite("vae.latents_prev", latents_prev)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
@@ -1098,27 +1125,34 @@ def main(args):
                         timesteps,
                         encoder_hidden_states=encoder_hidden_states.detach()
                     ).sample
+                    _check_finite("unet.model_pred_prev", model_pred_prev)
                     approximated_x0_latent_prev = noise_scheduler.get_approximated_x0(
                         model_pred_prev, timesteps, noisy_latents_prev
                     )
+                    _check_finite("approximated_x0_latent_prev", approximated_x0_latent_prev)
                     approximated_x0_rgb_prev = vae.decode(
                         approximated_x0_latent_prev / vae.config.scaling_factor
                     ).sample
+                    _check_finite("vae.decode.approximated_x0_rgb_prev", approximated_x0_rgb_prev)
 
                 # Step 2: optical flow + warp (fp32 — torch 2.0 grid_sample has no bf16 CUDA kernel)
                 # f_flow is HR (512x512); warp HR tensors then downscale for the LR freq path.
                 f_flow = get_flow(of_model, upscaled_lq_cur.float(), upscaled_lq_prev.float())
+                _check_finite("f_flow", f_flow)
                 warped_approximated_x0 = flow_warp(approximated_x0_rgb_prev.float(), f_flow)
                 upscaled_lq_prev_warped = flow_warp(upscaled_lq_prev.float(), f_flow)
                 lq_prev_warped = F.interpolate(
                     upscaled_lq_prev_warped, scale_factor=0.25, mode='bicubic'
                 )
+                _check_finite("warped_approximated_x0", warped_approximated_x0)
+                _check_finite("lq_prev_warped", lq_prev_warped)
 
                 # Step 3: frequency conditioning (DTCWT runs in fp32 for stability)
                 with torch.no_grad():
                     _, Yh_cur = dtcwt_model(lq.float())
                     _, Yh_prev_w = dtcwt_model(lq_prev_warped.float())
                     freq_cond = process_freq_cond(Yh_cur, Yh_prev_w, target_level=0)
+                    _check_finite("freq_cond", freq_cond)
 
                 # Step 4: ControlNet forward (warped approx-x0 as conditioning)
                 controlnet_image = warped_approximated_x0.to(dtype=weight_dtype).detach()
@@ -1129,6 +1163,8 @@ def main(args):
                     controlnet_cond=controlnet_image,
                     return_dict=False,
                 )
+                _check_finite("controlnet.down_block_res_samples", down_block_res_samples)
+                _check_finite("controlnet.mid_block_res_sample", mid_block_res_sample)
 
                 # Step 5: UNet forward with SFT (single call)
                 model_pred = unet_with_sft(
@@ -1141,6 +1177,7 @@ def main(args):
                     ],
                     mid_block_additional_residual=mid_block_res_sample.to(dtype=weight_dtype),
                 ).sample
+                _check_finite("unet_with_sft.model_pred", model_pred)
 
                 # Step 6: targets and losses
                 if noise_scheduler.config.prediction_type == "epsilon":
