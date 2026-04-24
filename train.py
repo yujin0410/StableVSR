@@ -673,14 +673,14 @@ def log_param_counts(accelerator, modules):
     logger.info(f"{'TOTAL':<20s} {grand_total:>14,d} {grand_trainable:>14,d}")
 
 
-def log_sft_summary(accelerator, sft_adapter, latent_h=64, latent_w=64):
+def log_sft_summary(accelerator, sft_adapter, feature_channels, cond_channels=36, latent_h=64, latent_w=64):
     """torchinfo summary for SFTAdapter (trainable component we actually care about)."""
     if not accelerator.is_main_process:
         return
     try:
         from torchinfo import summary
-        cond = torch.zeros(1, 36, latent_h, latent_w, device=accelerator.device)
-        x = torch.zeros(1, 320, latent_h, latent_w, device=accelerator.device)
+        cond = torch.zeros(1, cond_channels, latent_h, latent_w, device=accelerator.device)
+        x = torch.zeros(1, feature_channels, latent_h, latent_w, device=accelerator.device)
         logger.info("===== SFTAdapter (torchinfo) =====")
         logger.info(str(summary(sft_adapter, input_data=[x, cond], verbose=0)))
     except Exception as e:
@@ -774,7 +774,11 @@ def main(args):
         logger.info("Initializing controlnet weights from unet")
         controlnet = ControlNetModel.from_unet(unet, conditioning_embedding_out_channels=(64,128,256,))
 
-    sft_adapter = SFTAdapter(cond_channels=36, feature_channels=320)
+    # Read the final up-block channel count from the UNet config so SFTAdapter
+    # works with custom UNets (e.g. claudiom4sir/StableVSR uses 256, not SD's 320).
+    sft_feature_channels = unet.config.block_out_channels[0]
+    logger.info(f"SFTAdapter feature_channels = {sft_feature_channels} (from unet.config.block_out_channels[0])")
+    sft_adapter = SFTAdapter(cond_channels=36, feature_channels=sft_feature_channels)
     unet_with_sft = UNetWithSFT(unet, sft_adapter)
 
     # `accelerate` 0.16.0 will have better support for customized saving
@@ -969,7 +973,7 @@ def main(args):
             "sft_adapter": accelerator.unwrap_model(sft_adapter),
         },
     )
-    log_sft_summary(accelerator, accelerator.unwrap_model(sft_adapter))
+    log_sft_summary(accelerator, accelerator.unwrap_model(sft_adapter), feature_channels=sft_feature_channels)
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
