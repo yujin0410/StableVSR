@@ -50,10 +50,13 @@ class UNetWithSFT(nn.Module):
         if self.current_cond is None:
             return output
 
+        # accelerate's prepared-model wrapper returns fp32, but UNet's next layers
+        # are bf16/fp16, so restore the original feature dtype after SFT.
         if isinstance(output, tuple):
-            h = self.sft_adapter(output[0], self.current_cond)
+            ref = output[0]
+            h = self.sft_adapter(ref, self.current_cond).to(ref.dtype)
             return (h,) + output[1:]
-        return self.sft_adapter(output, self.current_cond)
+        return self.sft_adapter(output, self.current_cond).to(output.dtype)
 
     def forward(self, noisy_latents, timesteps, encoder_hidden_states, sft_cond=None, **kwargs):
         self.current_cond = sft_cond
