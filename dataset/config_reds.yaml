@@ -1,7 +1,7 @@
 dataset:
   train:
-    dataroot_gt: /home/crota/Datasets/REDS/train/gt/ # path to GT (e.g., 000, 001, 002 ... )
-    dataroot_lq: /home/crota/Datasets/REDS/train/bicubic/ # path to bicubic (e.g., 000, 001, 002 ... )
+    dataroot_gt: /mnt/data/dataset/REDS/train/gt/ # path to GT (e.g., 000, 001, 002 ... )
+    dataroot_lq: /mnt/data/dataset/REDS/train/bicubic/X4/ # path to bicubic (e.g., 000, 001, 002 ... )
     meta_info_file: /home/crota/stablevsr/dataset/REDS_train_metadata.txt
     dataroot_flow:
     io_backend:
@@ -17,9 +17,9 @@ dataset:
     scale: 4
     remove_partition: True
   test:
-    dataroot_gt: /home/crota/Datasets/REDS/test/gt/
-    dataroot_lq: /home/crota/Datasets/REDS/test/bicubic/
-    meta_info_file: /home/crota/Datasets/REDS/test/metadata.txt
+    dataroot_gt: /mnt/data/dataset/REDS/test/gt/
+    dataroot_lq: /mnt/data/dataset/REDS/test/bicubic/
+    meta_info_file: /mnt/data/dataset/REDS/test/metadata.txt
     io_backend:
       type: disk
     num_frame: 3

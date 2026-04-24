@@ -58,6 +58,9 @@ from diffusers.utils import check_min_version
 from diffusers.utils.import_utils import is_xformers_available
 from scheduler.ddpm_scheduler import DDPMScheduler
 
+from util.frequency_utils import DTCWTForward, compute_phase_diff
+from util.sft_utils import SFTAdapter, UNetWithSFT
+
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.21.0.dev0")
 
@@ -456,7 +459,7 @@ def parse_args(input_args=None):
         help=(
             "The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private,"
             " dataset). It can also be a path pointing to a local copy of a dataset in your filesystem,"
-            " or to a folder containing files that ðŸ¤— Datasets can understand."
+            " or to a folder containing files that ?¤— Datasets can understand."
         ),
     )
     parser.add_argument(
@@ -680,6 +683,9 @@ def main(args):
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
     )
+    unet.requires_grad_(False)
+    sft_adapter = SFTAdapter(cond_channels=12, feature_channels=320).to(accelerator.device, dtype=weight_dtype)
+    unet_with_sft = UNetWithSFT(unet, sft_adapter)
 
     if args.controlnet_model_name_or_path:
         logger.info("Loading existing controlnet weights")
@@ -719,6 +725,12 @@ def main(args):
         accelerator.register_load_state_pre_hook(load_model_hook)
 
     of_model = raft_large(weights=Raft_Large_Weights.DEFAULT)
+    
+    dtcwt_model = DTCWTForward(J=3, biort='near_sym_a', qshift='qshift_a') # ÆÄ¶ó¹ÌÅÍ´Â ¿¹½Ã
+    dtcwt_model = dtcwt_model.to(accelerator.device, dtype=weight_dtype)
+    dtcwt_model.requires_grad_(False) # Æ¯Â¡ ÃßÃâ¿ëÀº Frozen
+    
+    
     of_model.requires_grad_(False)
     vae.requires_grad_(False)
     unet.requires_grad_(False)
@@ -777,7 +789,7 @@ def main(args):
         optimizer_class = torch.optim.AdamW
 
     # Optimizer creation
-    params_to_optimize = controlnet.parameters()
+    params_to_optimize = list(controlnet.parameters()) + list(sft_adapter.parameters())
     optimizer = optimizer_class(
         params_to_optimize,
         lr=args.learning_rate,
@@ -816,8 +828,8 @@ def main(args):
     )
 
     # Prepare everything with our `accelerator`.
-    controlnet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        controlnet, optimizer, train_dataloader, lr_scheduler
+    controlnet, sft_adapter, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+        controlnet, sft_adapter, optimizer, train_dataloader, lr_scheduler
     )
 
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
@@ -906,6 +918,7 @@ def main(args):
 
     # get here input condition since it is fixed
     with torch.no_grad():
+    
         tokenization = tokenizer([''] * args.train_batch_size, max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt")
         encoder_hidden_states = text_encoder(tokenization.input_ids.to(accelerator.device))[0]
     for epoch in range(first_epoch, args.num_train_epochs):
@@ -971,8 +984,24 @@ def main(args):
                 # latents_prev_warped = compute_of_and_warp(of_model, upscaled_lq_cur, upscaled_lq_prev, latents_prev)
                 # controlnet_image = latents_prev_warped.to(dtype=weight_dtype)
                 f_flow = get_flow(of_model, upscaled_lq_cur, upscaled_lq_prev)
+                
+                lq_prev_warped = flow_warp(lq_prev, f_flow)
+                
                 warped_approximated_x0 = flow_warp(approximated_x0_rgb_prev, f_flow)
-                controlnet_image = warped_approximated_x0.to(dtype=weight_dtype).detach()
+                
+                with torch.no_grad():
+                    Yl_cur, Yh_cur = dtcwt_model(lq) 
+                    Yl_prev_w, Yh_prev_w = dtcwt_model(lq_prev_warped)
+                    
+                    mag_cur = torch.abs(Yh_cur[0]) 
+                    phase_diff = compute_phase_diff(Yh_cur, Yh_prev_w)[0]
+                
+                freq_cond = torch.cat([mag_cur, phase_diff], dim=1)
+                
+                
+                controlnet_image_base = warped_approximated_x0.to(dtype=weight_dtype).detach()
+                controlnet_image = controlnet_image_base
+                #controlnet_image = warped_approximated_x0.to(dtype=weight_dtype).detach()
 
                 down_block_res_samples, mid_block_res_sample = controlnet(
                     noisy_latents_cat,
@@ -989,6 +1018,7 @@ def main(args):
                     timesteps,
                     # class_labels = noise_level,
                     encoder_hidden_states=encoder_hidden_states.detach(),
+                    sft_cond=freq_cond.to(dtype=weight_dtype),
                     down_block_additional_residuals=[
                         sample.to(dtype=weight_dtype) for sample in down_block_res_samples
                     ],
@@ -1002,7 +1032,21 @@ def main(args):
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
-
+                approximated_x0_latent = noise_scheduler.get_approximated_x0(model_pred, timesteps, noisy_latents)
+                
+                
+                with torch.enable_grad(): 
+                    _, Yh_pred = dtcwt_model(approximated_x0_latent)
+                    _, Yh_gt = dtcwt_model(latents) 
+                    
+                    # °¢ ½ºÄÉÀÏ(·¹º§)º°·Î L1 Loss¸¦ °è»êÇÏ¿© ÇÕ»ê
+                    loss_wav = 0
+                    for pred_h, gt_h in zip(Yh_pred, Yh_gt):
+                        loss_wav += F.l1_loss(torch.abs(pred_h), torch.abs(gt_h))
+                
+                loss = loss + 0.1 * loss_wav
+                
+                
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
                     params_to_clip = controlnet.parameters()
