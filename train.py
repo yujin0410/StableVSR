@@ -815,61 +815,49 @@ def main(args):
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
         def save_model_hook(models, weights, output_dir):
+            # accelerate 0.23 occasionally hands us an empty models list, so we
+            # bypass it entirely and save the prepared modules via closure.
             os.makedirs(output_dir, exist_ok=True)
-            logger.info(f"save_model_hook: {len(models)} model(s) in list @ {output_dir}")
-            saved = {"controlnet": False, "sft_adapter": False}
-            while len(models) > 0:
-                model = models.pop()
-                if len(weights) > 0:
-                    weights.pop()
 
-                unwrapped = accelerator.unwrap_model(model)
-                cls_name = type(unwrapped).__name__
-                try:
-                    if isinstance(unwrapped, ControlNetModel):
-                        path = os.path.join(output_dir, "controlnet")
-                        unwrapped.save_pretrained(path)
-                        logger.info(f"  saved ControlNet -> {path}")
-                        saved["controlnet"] = True
-                    elif isinstance(unwrapped, SFTAdapter):
-                        path = os.path.join(output_dir, "sft_adapter.bin")
-                        torch.save(unwrapped.state_dict(), path)
-                        logger.info(f"  saved SFTAdapter -> {path}")
-                        saved["sft_adapter"] = True
-                    else:
-                        fallback = os.path.join(output_dir, f"unrecognized_{cls_name}.bin")
-                        torch.save(unwrapped.state_dict(), fallback)
-                        logger.warn(f"  unrecognized model {cls_name} -> {fallback}")
-                except Exception as e:
-                    logger.error(f"  FAILED saving {cls_name}: {e}")
-                    raise
-            missing = [k for k, v in saved.items() if not v]
-            if missing:
-                logger.error(f"save_model_hook: expected but missing {missing} in {output_dir}")
+            ctrl_path = os.path.join(output_dir, "controlnet")
+            sft_path = os.path.join(output_dir, "sft_adapter.bin")
+            accelerator.unwrap_model(controlnet).save_pretrained(ctrl_path)
+            torch.save(accelerator.unwrap_model(sft_adapter).state_dict(), sft_path)
+            logger.info(f"save_model_hook: wrote ControlNet -> {ctrl_path} and SFTAdapter -> {sft_path}")
+
+            # Drain the framework lists so accelerate doesn't double-save.
+            while len(models) > 0:
+                models.pop()
+            while len(weights) > 0:
+                weights.pop()
 
         def load_model_hook(models, input_dir):
-            while len(models) > 0:
-                model = models.pop()
-                unwrapped = accelerator.unwrap_model(model)
+            # Mirror save_model_hook: bypass the framework list and load via closure.
+            ctrl_cfg = os.path.join(input_dir, "controlnet", "config.json")
+            if os.path.isfile(ctrl_cfg):
+                load_model = ControlNetModel.from_pretrained(input_dir, subfolder="controlnet")
+                unwrapped = accelerator.unwrap_model(controlnet)
+                unwrapped.register_to_config(**load_model.config)
+                unwrapped.load_state_dict(load_model.state_dict())
+                del load_model
+                logger.info(f"load_model_hook: restored ControlNet from {ctrl_cfg}")
+            else:
+                logger.warn(
+                    f"controlnet/config.json not found in {input_dir}; "
+                    "keeping current ControlNet weights."
+                )
 
-                if isinstance(unwrapped, ControlNetModel):
-                    ctrl_cfg = os.path.join(input_dir, "controlnet", "config.json")
-                    if not os.path.isfile(ctrl_cfg):
-                        logger.warn(
-                            f"controlnet/config.json not found in {input_dir}; "
-                            "keeping current weights. Resume may be corrupt."
-                        )
-                        continue
-                    load_model = ControlNetModel.from_pretrained(input_dir, subfolder="controlnet")
-                    unwrapped.register_to_config(**load_model.config)
-                    unwrapped.load_state_dict(load_model.state_dict())
-                    del load_model
-                elif isinstance(unwrapped, SFTAdapter):
-                    sft_path = os.path.join(input_dir, "sft_adapter.bin")
-                    if os.path.isfile(sft_path):
-                        unwrapped.load_state_dict(torch.load(sft_path, map_location="cpu"))
-                    else:
-                        logger.warn(f"sft_adapter.bin not found in {input_dir}; skipping SFT load.")
+            sft_path = os.path.join(input_dir, "sft_adapter.bin")
+            if os.path.isfile(sft_path):
+                accelerator.unwrap_model(sft_adapter).load_state_dict(
+                    torch.load(sft_path, map_location="cpu")
+                )
+                logger.info(f"load_model_hook: restored SFTAdapter from {sft_path}")
+            else:
+                logger.warn(f"sft_adapter.bin not found in {input_dir}; skipping SFT load.")
+
+            while len(models) > 0:
+                models.pop()
 
         accelerator.register_save_state_pre_hook(save_model_hook)
         accelerator.register_load_state_pre_hook(load_model_hook)

@@ -1001,12 +1001,12 @@ class StableVSRPipeline(
         
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         with self.progress_bar(total=len(timesteps)*len(images)) as progress_bar:
-            reversed = False
+            is_reversed = False
 
             # for t, for image --> frame wise sampling
             for i, t in enumerate(timesteps):
-                flows = forward_flows if not reversed else backward_flows
-                freq_conds = (freq_conds_fwd if not reversed else freq_conds_bwd) if sft_enabled else None
+                flows = forward_flows if not is_reversed else backward_flows
+                freq_conds = (freq_conds_fwd if not is_reversed else freq_conds_bwd) if sft_enabled else None
                 for num_image, data in enumerate(images):
                     image = data
 
@@ -1107,10 +1107,10 @@ class StableVSRPipeline(
                 images.reverse()
                 latents.reverse()
                 upscaled_images.reverse()
-                reversed = not reversed
+                is_reversed = not is_reversed
 
         # restore the right frame order
-        if reversed:
+        if is_reversed:
             latents.reverse()
 
         # If we do sequential model offloading, let's offload unet and controlnet
