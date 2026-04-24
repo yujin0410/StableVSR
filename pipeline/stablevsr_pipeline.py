@@ -714,19 +714,22 @@ class StableVSRPipeline(
         backward_flows.reverse()
         return forward_flows, backward_flows
 
-    def compute_freq_conds(self, dtcwt_model, image_list, flow_list, target_dtype):
+    def compute_freq_conds(self, dtcwt_model, image_list, upscaled_image_list, flow_list, target_dtype):
         """
         Pre-compute per-pair SFT conditioning. For each index k, builds the
         freq_cond that should be active when processing image_list[k + 1]
-        (with image_list[k] warped to its coordinate via flow_list[k]).
+        (with upscaled_image_list[k] warped to its coordinate via flow_list[k]
+        at HR, then downscaled to LR for DTCWT).
         """
         freq_conds = []
         for k in range(len(flow_list)):
-            cur = image_list[k + 1].to(dtype=torch.float32)
-            prev = image_list[k].to(dtype=torch.float32)
-            prev_warped = of.flow_warp(prev, flow_list[k])
-            _, Yh_cur = dtcwt_model(cur)
-            _, Yh_prev_w = dtcwt_model(prev_warped)
+            cur_lr = image_list[k + 1].to(dtype=torch.float32)
+            prev_hr = upscaled_image_list[k].to(dtype=torch.float32)
+            # Warp at HR (matches flow resolution) then downscale to LR for freq path.
+            prev_warped_hr = of.flow_warp(prev_hr, flow_list[k])
+            prev_warped_lr = F.interpolate(prev_warped_hr, scale_factor=0.25, mode='bicubic')
+            _, Yh_cur = dtcwt_model(cur_lr)
+            _, Yh_prev_w = dtcwt_model(prev_warped_lr)
             fc = process_freq_cond(Yh_cur, Yh_prev_w, target_level=0)
             freq_conds.append(fc.to(dtype=target_dtype))
         return freq_conds
@@ -983,10 +986,15 @@ class StableVSRPipeline(
         sft_enabled = (dtcwt_model is not None) and (unet_with_sft is not None) and (len(images) > 1)
         if sft_enabled:
             freq_conds_fwd = self.compute_freq_conds(
-                dtcwt_model, images, forward_flows, target_dtype=prompt_embeds.dtype
+                dtcwt_model, images, upscaled_images, forward_flows,
+                target_dtype=prompt_embeds.dtype,
             )
             freq_conds_bwd = self.compute_freq_conds(
-                dtcwt_model, list(reversed(images)), backward_flows, target_dtype=prompt_embeds.dtype
+                dtcwt_model,
+                list(reversed(images)),
+                list(reversed(upscaled_images)),
+                backward_flows,
+                target_dtype=prompt_embeds.dtype,
             )
         else:
             freq_conds_fwd = freq_conds_bwd = None
