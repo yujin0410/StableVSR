@@ -768,8 +768,15 @@ def main(args):
     )
 
     if args.controlnet_model_name_or_path:
-        logger.info("Loading existing controlnet weights")
-        controlnet = ControlNetModel.from_pretrained(args.controlnet_model_name_or_path)
+        logger.info(f"Loading existing controlnet weights from {args.controlnet_model_name_or_path}")
+        # Multi-component repos (e.g. claudiom4sir/StableVSR) keep ControlNet under
+        # a 'controlnet' subfolder; standalone ControlNet repos have config.json at root.
+        try:
+            controlnet = ControlNetModel.from_pretrained(
+                args.controlnet_model_name_or_path, subfolder="controlnet"
+            )
+        except (OSError, EnvironmentError):
+            controlnet = ControlNetModel.from_pretrained(args.controlnet_model_name_or_path)
     else:
         logger.info("Initializing controlnet weights from unet")
         controlnet = ControlNetModel.from_unet(unet, conditioning_embedding_out_channels=(64,128,256,))
