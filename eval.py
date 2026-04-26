@@ -78,6 +78,12 @@ for seq in seqs:
             gt = tt(gt).unsqueeze(0).to(device)
             rec = tt(rec).unsqueeze(0).to(device)
 
+            if gt.shape[-2:] != rec.shape[-2:]:
+                h = min(gt.shape[-2], rec.shape[-2])
+                w = min(gt.shape[-1], rec.shape[-1])
+                gt = CenterCrop((h, w))(gt)
+                rec = CenterCrop((h, w))(rec)
+
             psnr_value = psnr(gt, rec)
             ssim_value = ssim(gt, rec)
             lpips_value = lpips(gt, rec)
