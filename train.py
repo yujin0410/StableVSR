@@ -1063,8 +1063,12 @@ def main(args):
             args.resume_from_checkpoint = None
             initial_global_step = 0
         else:
-            accelerator.print(f"Resuming from checkpoint {path}")
-            accelerator.load_state(os.path.join(args.output_dir, path))
+            if args.resume_from_checkpoint != "latest" and os.path.isdir(args.resume_from_checkpoint):
+                resume_path = args.resume_from_checkpoint
+            else:
+                resume_path = os.path.join(args.output_dir, path)
+            accelerator.print(f"Resuming from checkpoint {resume_path}")
+            accelerator.load_state(resume_path)
             global_step = int(path.split("-")[1])
 
             initial_global_step = global_step
