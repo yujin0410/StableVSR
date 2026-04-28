@@ -1,0 +1,45 @@
+dataset:
+  train:
+    type: mixed
+    reds_ratio: 0.5
+    reds:
+      dataroot_gt: /mnt/HDD_raid1/yjcho/data/REDS/train/gt/
+      dataroot_lq: /mnt/HDD_raid1/yjcho/data/REDS/train/bicubic/X4/
+      meta_info_file: /home/yjcho/StableVSR/dataset/REDS_train_metadata.txt
+      dataroot_flow:
+      io_backend:
+        type: disk
+      num_frame: 3
+      val_partition: 'REDS4'
+      test_mode: False
+      interval_list: [1]
+      random_reverse: False
+      gt_size: 256
+      use_hflip: True
+      use_rot: False
+      scale: 4
+      remove_partition: True
+    vimeo:
+      dataroot_gt: /mnt/HDD_raid1/yjcho/data/vimeo/vimeo_septuplet/sequences/
+      meta_info_file: /mnt/HDD_raid1/yjcho/data/vimeo/vimeo_septuplet/sep_trainlist.txt
+      num_frame: 3
+      gt_size: 256
+      use_hflip: True
+      use_rot: False
+      scale: 4
+      random_reverse: False
+  test:
+    dataroot_gt: /mnt/HDD_raid1/yjcho/data/REDS/test/gt/
+    dataroot_lq: /mnt/HDD_raid1/yjcho/data/REDS/test/bicubic/
+    meta_info_file: /mnt/HDD_raid1/yjcho/data/REDS/test/metadata.txt
+    io_backend:
+      type: disk
+    num_frame: 3
+    val_partition: 'REDS4'
+    test_mode: True
+    interval_list: [1]
+    random_reverse: False
+    gt_size: 256
+    use_hflip: False
+    use_rot: False
+    scale: 4

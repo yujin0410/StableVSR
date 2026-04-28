@@ -936,7 +936,19 @@ def main(args):
 
     # train_dataset = make_train_dataset(args, tokenizer, accelerator)
     dataset_opts = OmegaConf.load(args.dataset_config_path)
-    train_dataset = REDSRecurrentDataset(dataset_opts['dataset']['train'])
+    train_cfg = dataset_opts['dataset']['train']
+    dataset_type = train_cfg.get('type', 'reds') if hasattr(train_cfg, 'get') else 'reds'
+    if dataset_type == 'mixed':
+        from dataset.mixed_dataset import MixedDataset
+        train_dataset = MixedDataset(train_cfg)
+        logger.info(f"Using MixedDataset (reds_ratio={train_cfg.get('reds_ratio', 0.5)})")
+    elif dataset_type == 'vimeo':
+        from dataset.vimeo_dataset import VimeoSeptupletDataset
+        train_dataset = VimeoSeptupletDataset(train_cfg)
+        logger.info("Using VimeoSeptupletDataset")
+    else:
+        train_dataset = REDSRecurrentDataset(train_cfg)
+        logger.info("Using REDSRecurrentDataset")
 
 
     train_dataloader = torch.utils.data.DataLoader(
