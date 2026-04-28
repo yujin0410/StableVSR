@@ -58,14 +58,16 @@ class VimeoSeptupletDataset(data.Dataset):
     def _load_hr(self, key, frame_idx):
         path = self.gt_root / key / f'im{frame_idx + 1}.png'
         img = Image.open(path).convert('RGB')
-        return np.asarray(img, dtype=np.float32) / 255.0
+        arr = np.asarray(img, dtype=np.float32) / 255.0
+        return np.ascontiguousarray(arr)
 
     def _hr_to_lr(self, img_hr):
-        t = torch.from_numpy(img_hr).permute(2, 0, 1).unsqueeze(0)
+        t = torch.from_numpy(img_hr).permute(2, 0, 1).unsqueeze(0).contiguous()
         t = F.interpolate(
             t, scale_factor=1.0 / self.scale, mode='bicubic', antialias=True
         )
-        return t.squeeze(0).permute(1, 2, 0).clamp(0.0, 1.0).numpy()
+        arr = t.squeeze(0).permute(1, 2, 0).clamp(0.0, 1.0).contiguous().numpy()
+        return np.ascontiguousarray(arr)
 
     def __getitem__(self, index):
         key = self.keys[index]
