@@ -22,7 +22,7 @@ accelerate launch --num_processes $NUM_PROCESSES --main_process_port 29501 train
  --pretrained_vae_model_name_or_path=$MODEL_ID \
  --controlnet_model_name_or_path=$MODEL_ID \
  --output_dir=$OUTPUT_DIR \
- --dataset_config_path="/home/yjcho/StableVSR/dataset/config_mixed.yaml" \
+ --dataset_config_path="/home/yjcho/StableVSR/dataset/config_reds.yaml" \
  --learning_rate=5e-5 \
  --validation_steps=1000 \
  --train_batch_size=8 \
