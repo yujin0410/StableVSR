@@ -37,22 +37,24 @@ def get_dtcwt_magnitude(Yh):
     return mags
 
 
-def process_freq_cond(Yh_cur, Yh_prev_w, target_level=0):
-    """
-    Build SFT conditioning tensor at the chosen wavelet scale.
-    Output shape: [B, 2 * C * 6, H, W]  (mag concat with phase_diff).
+def process_freq_cond(Yh_cur, Yh_prev_w):
+    """Build per-scale [magnitude, phase_diff] features for SFT conditioning.
+
+    Returns:
+        List of tensors, one per DT-CWT scale (finest first), each of shape
+        [B, 2 * C * 6, H_j, W_j] where 2 = (mag, phase_diff), C = RGB,
+        and 6 = directional subbands.
     """
     mags = get_dtcwt_magnitude(Yh_cur)
     phase_diffs = compute_phase_diff(Yh_cur, Yh_prev_w)
 
-    mag_target = mags[target_level]
-    phase_diff_target = phase_diffs[target_level]
-
-    B, C, D, H, W = mag_target.shape
-    mag_reshaped = mag_target.reshape(B, C * D, H, W)
-    phase_reshaped = phase_diff_target.reshape(B, C * D, H, W)
-
-    return torch.cat([mag_reshaped, phase_reshaped], dim=1)
+    per_scale = []
+    for mag, pd in zip(mags, phase_diffs):
+        B, C, D, H, W = mag.shape
+        mag_r = mag.reshape(B, C * D, H, W)
+        pd_r = pd.reshape(B, C * D, H, W)
+        per_scale.append(torch.cat([mag_r, pd_r], dim=1))
+    return per_scale
 
 
 def wavelet_magnitude_loss(Yh_pred, Yh_gt):

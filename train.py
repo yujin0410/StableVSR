@@ -1184,7 +1184,7 @@ def main(args):
                 with torch.no_grad():
                     _, Yh_cur = dtcwt_model(lq.float())
                     _, Yh_prev_w = dtcwt_model(lq_prev_warped.float())
-                    freq_cond = process_freq_cond(Yh_cur, Yh_prev_w, target_level=0)
+                    freq_cond = process_freq_cond(Yh_cur, Yh_prev_w)
                     _check_finite("freq_cond", freq_cond)
 
                 # Step 4: ControlNet forward (warped approx-x0 as conditioning)
@@ -1204,7 +1204,7 @@ def main(args):
                     noisy_latents_cat,
                     timesteps,
                     encoder_hidden_states=encoder_hidden_states.detach(),
-                    sft_cond=freq_cond.to(dtype=weight_dtype),
+                    sft_cond=[fc.to(dtype=weight_dtype) for fc in freq_cond],
                     down_block_additional_residuals=[
                         sample.to(dtype=weight_dtype) for sample in down_block_res_samples
                     ],

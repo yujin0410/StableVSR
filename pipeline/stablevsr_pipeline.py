@@ -730,8 +730,9 @@ class StableVSRPipeline(
             prev_warped_lr = F.interpolate(prev_warped_hr, scale_factor=0.25, mode='bicubic')
             _, Yh_cur = dtcwt_model(cur_lr)
             _, Yh_prev_w = dtcwt_model(prev_warped_lr)
-            fc = process_freq_cond(Yh_cur, Yh_prev_w, target_level=0)
-            freq_conds.append(fc.to(dtype=target_dtype))
+            fc_list = process_freq_cond(Yh_cur, Yh_prev_w)
+            fc_list = [fc.to(dtype=target_dtype) for fc in fc_list]
+            freq_conds.append(fc_list)
         return freq_conds
         
 
@@ -1067,7 +1068,7 @@ class StableVSRPipeline(
                     if sft_enabled and num_image > 0:
                         fc = freq_conds[num_image - 1]
                         if do_classifier_free_guidance:
-                            fc = torch.cat([fc] * 2)
+                            fc = [torch.cat([f] * 2) for f in fc]
                         unet_with_sft.current_cond = fc
                     elif unet_with_sft is not None:
                         unet_with_sft.current_cond = None
