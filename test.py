@@ -8,7 +8,12 @@ from torchvision.models.optical_flow import raft_large, Raft_Large_Weights
 from pathlib import Path
 import torch
 
-from util.sft_utils import SFTAdapter, UNetWithSFT
+from util.sft_utils import (
+    SFTAdapter,
+    UNetWithSFT,
+    FrequencyConditioningEncoder,
+    UNetWithDualSFT,
+)
 from util.frequency_utils import DTCWTForward
 
 
@@ -39,6 +44,13 @@ parser.add_argument(
     default=None,
     help="Optional path to sft_adapter.bin. When provided, the SFT adapter is "
          "loaded and DT-CWT frequency conditioning is enabled in the pipeline.",
+)
+parser.add_argument(
+    "--dual_sft",
+    action="store_true",
+    help="Use the frequency-separated dual-SFT design "
+         "(FrequencyConditioningEncoder + UNetWithDualSFT, DT-CWT J=4) "
+         "matching --dual_sft training. Requires --sft_ckpt.",
 )
 args = parser.parse_args()
 
@@ -71,22 +83,46 @@ if args.sft_ckpt is not None:
     if not os.path.isfile(args.sft_ckpt):
         raise FileNotFoundError(f"--sft_ckpt does not exist: {args.sft_ckpt}")
 
-    feature_channels = pipeline.unet.config.block_out_channels[0]
-    print(f"  SFT feature_channels = {feature_channels} (from unet.config.block_out_channels[0])")
+    if args.dual_sft:
+        inject_channels = pipeline.unet.config.block_out_channels[1]
+        per_level = inject_channels // 2
+        print(f"  Dual-SFT: inject channels = {inject_channels}, per-level = {per_level}")
+        sft_adapter = FrequencyConditioningEncoder(
+            in_channels=18, mid_channels=64,
+            sft_out_channels_high=per_level,
+            sft_out_channels_low=per_level,
+            high_target=None, low_target=None,
+        )
+        sft_adapter.load_state_dict(torch.load(args.sft_ckpt, map_location='cpu'))
+        sft_adapter = sft_adapter.to(device)
+        sft_adapter.eval()
+        sft_adapter.requires_grad_(False)
 
-    sft_adapter = SFTAdapter(cond_channels=36, feature_channels=feature_channels)
-    sft_adapter.load_state_dict(torch.load(args.sft_ckpt, map_location='cpu'))
-    sft_adapter = sft_adapter.to(device)
-    sft_adapter.eval()
-    sft_adapter.requires_grad_(False)
+        unet_with_sft = UNetWithDualSFT(pipeline.unet)
+        unet_with_sft.cond_encoder = sft_adapter
 
-    # Wrap pipeline.unet so the forward hook on up_blocks[3] becomes active.
-    unet_with_sft = UNetWithSFT(pipeline.unet, sft_adapter)
+        dtcwt_model = DTCWTForward(J=4, biort='near_sym_a', qshift='qshift_a').to(device)
+        dtcwt_model.requires_grad_(False)
+        print(f"  Loaded dual-SFT FrequencyConditioningEncoder from {args.sft_ckpt}")
+    else:
+        feature_channels = pipeline.unet.config.block_out_channels[0]
+        print(f"  SFT feature_channels = {feature_channels} (from unet.config.block_out_channels[0])")
 
-    dtcwt_model = DTCWTForward(J=3, biort='near_sym_a', qshift='qshift_a').to(device)
-    dtcwt_model.requires_grad_(False)
-    print(f"  Loaded SFT adapter from {args.sft_ckpt}")
+        sft_adapter = SFTAdapter(cond_channels=36, feature_channels=feature_channels)
+        sft_adapter.load_state_dict(torch.load(args.sft_ckpt, map_location='cpu'))
+        sft_adapter = sft_adapter.to(device)
+        sft_adapter.eval()
+        sft_adapter.requires_grad_(False)
+
+        # Wrap pipeline.unet so the forward hook on up_blocks[3] becomes active.
+        unet_with_sft = UNetWithSFT(pipeline.unet, sft_adapter)
+
+        dtcwt_model = DTCWTForward(J=3, biort='near_sym_a', qshift='qshift_a').to(device)
+        dtcwt_model.requires_grad_(False)
+        print(f"  Loaded SFT adapter from {args.sft_ckpt}")
 else:
+    if args.dual_sft:
+        raise ValueError("--dual_sft requires --sft_ckpt to load the trained encoder.")
     print("  SFT disabled (no --sft_ckpt provided); inference uses ControlNet only.")
 
 # iterate for every video sequence in the input folder
