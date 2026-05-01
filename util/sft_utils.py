@@ -159,19 +159,37 @@ class FrequencyConditioningEncoder(nn.Module):
         self.proc_j4 = PerLevelProcessor(in_channels, mid_channels,
                                          sft_out_channels_low, low_target)
 
+    @staticmethod
+    def _resize(t, target_hw):
+        if t.shape[-2:] == target_hw:
+            return t
+        return F.interpolate(t, size=target_hw, mode='bilinear', align_corners=False)
+
     def forward(self, yh, yl=None):
         gamma_j1, beta_j1, res_j1, a1 = self.proc_j1(yh[0])
         gamma_j2, beta_j2, res_j2, a2 = self.proc_j2(yh[1])
         gamma_j3, beta_j3, res_j3, a3 = self.proc_j3(yh[2])
         gamma_j4, beta_j4, res_j4, a4 = self.proc_j4(yh[3])
 
+        # HIGH group: align j=1 (finer) -> j=2 spatial size (smaller)
+        high_hw = gamma_j2.shape[-2:]
+        gamma_j1 = self._resize(gamma_j1, high_hw)
+        beta_j1 = self._resize(beta_j1, high_hw)
+        res_j1_aligned = self._resize(res_j1, high_hw)
+
+        # LOW group: align j=4 (coarser, smaller) -> j=3 spatial size
+        low_hw = gamma_j3.shape[-2:]
+        gamma_j4 = self._resize(gamma_j4, low_hw)
+        beta_j4 = self._resize(beta_j4, low_hw)
+        res_j4_aligned = self._resize(res_j4, low_hw)
+
         high_gamma = torch.cat([gamma_j1, gamma_j2], dim=1)
         high_beta = torch.cat([beta_j1, beta_j2], dim=1)
-        high_residual = a1 * res_j1 + a2 * res_j2
+        high_residual = a1 * res_j1_aligned + a2 * res_j2
 
         low_gamma = torch.cat([gamma_j3, gamma_j4], dim=1)
         low_beta = torch.cat([beta_j3, beta_j4], dim=1)
-        low_residual = a3 * res_j3 + a4 * res_j4
+        low_residual = a3 * res_j3 + a4 * res_j4_aligned
 
         return {
             'high_gamma': high_gamma,
