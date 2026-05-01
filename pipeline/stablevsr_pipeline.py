@@ -716,10 +716,10 @@ class StableVSRPipeline(
 
     def compute_freq_conds(self, dtcwt_model, image_list, upscaled_image_list, flow_list, target_dtype):
         """
-        Pre-compute per-pair SFT conditioning. For each index k, builds the
-        freq_cond that should be active when processing image_list[k + 1]
-        (with upscaled_image_list[k] warped to its coordinate via flow_list[k]
-        at HR, then downscaled to LR for DTCWT).
+        Pre-compute per-pair SFT conditioning (legacy single-SFT design).
+        For each index k, builds the freq_cond that should be active when
+        processing image_list[k + 1] (with upscaled_image_list[k] warped
+        via flow_list[k] at HR, then downscaled to LR for DTCWT).
         """
         freq_conds = []
         for k in range(len(flow_list)):
@@ -734,6 +734,23 @@ class StableVSRPipeline(
             fc_list = [fc.to(dtype=target_dtype) for fc in fc_list]
             freq_conds.append(fc_list)
         return freq_conds
+
+    def compute_dual_freq_conds(self, dtcwt_model, cond_encoder, image_list, target_dtype):
+        """Pre-compute per-frame conditioning for the dual-SFT design.
+
+        Runs DT-CWT on each LR frame and feeds (yh, yl) into the trainable
+        ``FrequencyConditioningEncoder`` to produce per-frame
+        low_gamma/beta and high_gamma/beta tensors.
+
+        Returns a list (len == len(image_list)) of dicts, one per frame.
+        """
+        conds = []
+        for img in image_list:
+            cur_lr = img.to(dtype=torch.float32)
+            yl, yh = dtcwt_model(cur_lr)
+            out = cond_encoder(yh, yl)
+            conds.append({k: v.to(dtype=target_dtype) for k, v in out.items()})
+        return conds
         
 
     @torch.no_grad()
@@ -983,9 +1000,26 @@ class StableVSRPipeline(
         interp_mode = 'bilinear' if of_rescale_factor == 1 else 'nearest'
 
         # 8.1 Pre-compute SFT frequency conditioning for both scan directions.
-        # LR frames don't change during denoising, so these are static per frame pair.
+        # LR frames don't change during denoising, so these are static per frame.
+        from util.sft_utils import UNetWithDualSFT  # local import avoids cycles
         sft_enabled = (dtcwt_model is not None) and (unet_with_sft is not None) and (len(images) > 1)
-        if sft_enabled:
+        dual_sft_enabled = sft_enabled and isinstance(unet_with_sft, UNetWithDualSFT)
+        if dual_sft_enabled:
+            cond_encoder = getattr(unet_with_sft, 'cond_encoder', None)
+            if cond_encoder is None:
+                raise ValueError(
+                    "UNetWithDualSFT instance must expose .cond_encoder for the "
+                    "pipeline to run conditioning. Attach it before inference."
+                )
+            freq_conds_fwd = self.compute_dual_freq_conds(
+                dtcwt_model, cond_encoder, images,
+                target_dtype=prompt_embeds.dtype,
+            )
+            freq_conds_bwd = self.compute_dual_freq_conds(
+                dtcwt_model, cond_encoder, list(reversed(images)),
+                target_dtype=prompt_embeds.dtype,
+            )
+        elif sft_enabled:
             freq_conds_fwd = self.compute_freq_conds(
                 dtcwt_model, images, upscaled_images, forward_flows,
                 target_dtype=prompt_embeds.dtype,
@@ -1064,14 +1098,24 @@ class StableVSRPipeline(
                             down_block_res_samples = [torch.cat([torch.zeros_like(d), d]) for d in down_block_res_samples]
                             mid_block_res_sample = torch.cat([torch.zeros_like(mid_block_res_sample), mid_block_res_sample])
                     
-                    # SFT conditioning injection: hook fires iff unet_with_sft.current_cond is set.
-                    if sft_enabled and num_image > 0:
+                    # SFT conditioning injection.
+                    if dual_sft_enabled:
+                        cond = freq_conds[num_image]
+                        if do_classifier_free_guidance:
+                            cond = {k: torch.cat([v] * 2) for k, v in cond.items()}
+                        unet_with_sft.current_low = (cond['low_gamma'], cond['low_beta'])
+                        unet_with_sft.current_high = (cond['high_gamma'], cond['high_beta'])
+                    elif sft_enabled and num_image > 0:
                         fc = freq_conds[num_image - 1]
                         if do_classifier_free_guidance:
                             fc = [torch.cat([f] * 2) for f in fc]
                         unet_with_sft.current_cond = fc
                     elif unet_with_sft is not None:
-                        unet_with_sft.current_cond = None
+                        if hasattr(unet_with_sft, 'current_cond'):
+                            unet_with_sft.current_cond = None
+                        if hasattr(unet_with_sft, 'current_low'):
+                            unet_with_sft.current_low = None
+                            unet_with_sft.current_high = None
 
                     try:
                         # predict the noise residual

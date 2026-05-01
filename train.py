@@ -59,7 +59,12 @@ from diffusers.utils.import_utils import is_xformers_available
 from scheduler.ddpm_scheduler import DDPMScheduler
 
 from util.frequency_utils import DTCWTForward, process_freq_cond, wavelet_magnitude_loss
-from util.sft_utils import SFTAdapter, UNetWithSFT
+from util.sft_utils import (
+    SFTAdapter,
+    UNetWithSFT,
+    FrequencyConditioningEncoder,
+    UNetWithDualSFT,
+)
 from util.metrics import VSRMetrics
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
@@ -603,6 +608,41 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
+        "--dual_sft",
+        action="store_true",
+        help=(
+            "Use the frequency-separated dual-SFT design (FrequencyConditioningEncoder "
+            "+ UNetWithDualSFT) instead of the legacy single-injection SFTAdapter."
+        ),
+    )
+    parser.add_argument(
+        "--freq_loss_interval",
+        type=int,
+        default=4,
+        help=(
+            "When --dual_sft, apply the frequency-separated loss every N optimizer "
+            "steps (RGB-space DT-CWT requires VAE decode). Set to 1 to apply every step."
+        ),
+    )
+    parser.add_argument(
+        "--lambda_freq",
+        type=float,
+        default=1.0,
+        help="Overall weight for the frequency-separated loss term.",
+    )
+    parser.add_argument(
+        "--lambda_freq_high",
+        type=float,
+        default=0.1,
+        help="Weight for the high-frequency (mag-only) component within freq loss.",
+    )
+    parser.add_argument(
+        "--lambda_freq_low",
+        type=float,
+        default=1.0,
+        help="Weight for the low-frequency (mag+phase) component within freq loss.",
+    )
+    parser.add_argument(
         "--tracker_project_name",
         type=str,
         default="train_controlnet",
@@ -804,12 +844,35 @@ def main(args):
         logger.info("Initializing controlnet weights from unet")
         controlnet = ControlNetModel.from_unet(unet, conditioning_embedding_out_channels=(64,128,256,))
 
-    # Read the final up-block channel count from the UNet config so SFTAdapter
-    # works with custom UNets (e.g. claudiom4sir/StableVSR uses 256, not SD's 320).
+    # Read block channels from the UNet config so adapters auto-match
+    # whatever variant is loaded (claudiom4sir/StableVSR uses 256 first; SD2.1 uses 320).
     sft_feature_channels = unet.config.block_out_channels[0]
-    logger.info(f"SFTAdapter feature_channels = {sft_feature_channels} (from unet.config.block_out_channels[0])")
-    sft_adapter = SFTAdapter(cond_channels=36, feature_channels=sft_feature_channels)
-    unet_with_sft = UNetWithSFT(unet, sft_adapter)
+    logger.info(
+        f"UNet block_out_channels = {list(unet.config.block_out_channels)}"
+    )
+
+    if args.dual_sft:
+        sft_inject_channels = unet.config.block_out_channels[1]
+        per_level_high = sft_inject_channels // 2
+        per_level_low = sft_inject_channels // 2
+        logger.info(
+            f"Dual-SFT: inject channels = {sft_inject_channels}, "
+            f"per-level HIGH = {per_level_high}, LOW = {per_level_low}"
+        )
+        sft_adapter = FrequencyConditioningEncoder(
+            in_channels=18, mid_channels=64,
+            sft_out_channels_high=per_level_high,
+            sft_out_channels_low=per_level_low,
+            high_target=None, low_target=None,
+        )
+        unet_with_sft = UNetWithDualSFT(unet)
+        unet_with_sft.cond_encoder = sft_adapter
+    else:
+        logger.info(
+            f"Legacy SFTAdapter feature_channels = {sft_feature_channels}"
+        )
+        sft_adapter = SFTAdapter(cond_channels=36, feature_channels=sft_feature_channels)
+        unet_with_sft = UNetWithSFT(unet, sft_adapter)
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
@@ -863,7 +926,10 @@ def main(args):
         accelerator.register_load_state_pre_hook(load_model_hook)
 
     of_model = raft_large(weights=Raft_Large_Weights.DEFAULT)
-    dtcwt_model = DTCWTForward(J=3, biort='near_sym_a', qshift='qshift_a')
+    dtcwt_model = DTCWTForward(
+        J=4 if args.dual_sft else 3,
+        biort='near_sym_a', qshift='qshift_a',
+    )
 
     of_model.requires_grad_(False)
     dtcwt_model.requires_grad_(False)
@@ -980,7 +1046,10 @@ def main(args):
         controlnet, sft_adapter, optimizer, train_dataloader, lr_scheduler
     )
     # Re-bind the (possibly DDP-wrapped) sft_adapter so the hook uses the prepared module.
-    unet_with_sft.sft_adapter = sft_adapter
+    if args.dual_sft:
+        unet_with_sft.cond_encoder = sft_adapter
+    else:
+        unet_with_sft.sft_adapter = sft_adapter
 
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
@@ -1032,7 +1101,11 @@ def main(args):
             "sft_adapter": accelerator.unwrap_model(sft_adapter),
         },
     )
-    log_sft_summary(accelerator, accelerator.unwrap_model(sft_adapter), feature_channels=sft_feature_channels)
+    if args.dual_sft:
+        n_params = sum(p.numel() for p in sft_adapter.parameters() if p.requires_grad)
+        logger.info(f"FrequencyConditioningEncoder trainable params: {n_params/1e6:.3f}M")
+    else:
+        log_sft_summary(accelerator, accelerator.unwrap_model(sft_adapter), feature_channels=sft_feature_channels)
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
@@ -1181,11 +1254,20 @@ def main(args):
                 _check_finite("lq_prev_warped", lq_prev_warped)
 
                 # Step 3: frequency conditioning (DTCWT runs in fp32 for stability)
-                with torch.no_grad():
-                    _, Yh_cur = dtcwt_model(lq.float())
-                    _, Yh_prev_w = dtcwt_model(lq_prev_warped.float())
-                    freq_cond = process_freq_cond(Yh_cur, Yh_prev_w)
-                    _check_finite("freq_cond", freq_cond)
+                if args.dual_sft:
+                    # New design: encoder consumes (yh, yl) of CURRENT LR only
+                    with torch.no_grad():
+                        Yl_cur, Yh_cur = dtcwt_model(lq.float())
+                    # Encoder forward (gradients flow via this path)
+                    cond_dict = sft_adapter(Yh_cur, Yl_cur)
+                    _check_finite("dual_sft.low_gamma", cond_dict['low_gamma'])
+                    _check_finite("dual_sft.high_gamma", cond_dict['high_gamma'])
+                else:
+                    with torch.no_grad():
+                        _, Yh_cur = dtcwt_model(lq.float())
+                        _, Yh_prev_w = dtcwt_model(lq_prev_warped.float())
+                        freq_cond = process_freq_cond(Yh_cur, Yh_prev_w)
+                        _check_finite("freq_cond", freq_cond)
 
                 # Step 4: ControlNet forward (warped approx-x0 as conditioning)
                 controlnet_image = warped_approximated_x0.to(dtype=weight_dtype).detach()
@@ -1200,16 +1282,33 @@ def main(args):
                 _check_finite("controlnet.mid_block_res_sample", mid_block_res_sample)
 
                 # Step 5: UNet forward with SFT (single call)
-                model_pred = unet_with_sft(
-                    noisy_latents_cat,
-                    timesteps,
-                    encoder_hidden_states=encoder_hidden_states.detach(),
-                    sft_cond=[fc.to(dtype=weight_dtype) for fc in freq_cond],
-                    down_block_additional_residuals=[
-                        sample.to(dtype=weight_dtype) for sample in down_block_res_samples
-                    ],
-                    mid_block_additional_residual=mid_block_res_sample.to(dtype=weight_dtype),
-                ).sample
+                if args.dual_sft:
+                    low_gamma = cond_dict['low_gamma'].to(dtype=weight_dtype)
+                    low_beta = cond_dict['low_beta'].to(dtype=weight_dtype)
+                    high_gamma = cond_dict['high_gamma'].to(dtype=weight_dtype)
+                    high_beta = cond_dict['high_beta'].to(dtype=weight_dtype)
+                    model_pred = unet_with_sft(
+                        noisy_latents_cat,
+                        timesteps,
+                        encoder_hidden_states=encoder_hidden_states.detach(),
+                        low_sft=(low_gamma, low_beta),
+                        high_sft=(high_gamma, high_beta),
+                        down_block_additional_residuals=[
+                            sample.to(dtype=weight_dtype) for sample in down_block_res_samples
+                        ],
+                        mid_block_additional_residual=mid_block_res_sample.to(dtype=weight_dtype),
+                    ).sample
+                else:
+                    model_pred = unet_with_sft(
+                        noisy_latents_cat,
+                        timesteps,
+                        encoder_hidden_states=encoder_hidden_states.detach(),
+                        sft_cond=[fc.to(dtype=weight_dtype) for fc in freq_cond],
+                        down_block_additional_residuals=[
+                            sample.to(dtype=weight_dtype) for sample in down_block_res_samples
+                        ],
+                        mid_block_additional_residual=mid_block_res_sample.to(dtype=weight_dtype),
+                    ).sample
                 _check_finite("unet_with_sft.model_pred", model_pred)
 
                 # Step 6: targets and losses
@@ -1221,15 +1320,42 @@ def main(args):
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
                 loss_mse = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
-                # Wavelet magnitude loss in latent space (approx-x0 vs gt latents)
-                approximated_x0_latent = noise_scheduler.get_approximated_x0(
-                    model_pred, timesteps, noisy_latents
-                )
-                _, Yh_pred = dtcwt_model(approximated_x0_latent.float())
-                with torch.no_grad():
-                    _, Yh_gt = dtcwt_model(latents.float())
-                loss_wav = wavelet_magnitude_loss(Yh_pred, Yh_gt)
-                loss = loss_mse + 0.1 * loss_wav
+                if args.dual_sft:
+                    # Frequency-separated loss in RGB space, applied every
+                    # `freq_loss_interval` steps to amortize VAE decode cost.
+                    apply_freq = (global_step % max(1, args.freq_loss_interval) == 0)
+                    if apply_freq:
+                        from util.frequency_utils import frequency_separated_loss
+                        approximated_x0_latent = noise_scheduler.get_approximated_x0(
+                            model_pred, timesteps, noisy_latents
+                        )
+                        x_hr_pred = vae.decode(
+                            approximated_x0_latent.float() / vae.config.scaling_factor
+                        ).sample
+                        Yl_pred, Yh_pred = dtcwt_model(x_hr_pred.float())
+                        with torch.no_grad():
+                            Yl_gt, Yh_gt = dtcwt_model(gt.float())
+                        loss_freq = frequency_separated_loss(
+                            Yh_pred, Yh_gt, Yl_pred, Yl_gt,
+                            high_levels=(0, 1), low_levels=(2, 3),
+                            lambda_high=args.lambda_freq_high,
+                            lambda_low=args.lambda_freq_low,
+                            lambda_lp=1.0,
+                        )
+                    else:
+                        loss_freq = torch.zeros((), device=model_pred.device)
+                    loss_wav = loss_freq  # logged under same name for consistency
+                    loss = loss_mse + args.lambda_freq * loss_freq
+                else:
+                    # Legacy: latent-space wavelet magnitude loss every step
+                    approximated_x0_latent = noise_scheduler.get_approximated_x0(
+                        model_pred, timesteps, noisy_latents
+                    )
+                    _, Yh_pred = dtcwt_model(approximated_x0_latent.float())
+                    with torch.no_grad():
+                        _, Yh_gt = dtcwt_model(latents.float())
+                    loss_wav = wavelet_magnitude_loss(Yh_pred, Yh_gt)
+                    loss = loss_mse + 0.1 * loss_wav
 
                 accelerator.backward(loss)
                 grad_norm = None
