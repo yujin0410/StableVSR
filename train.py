@@ -20,6 +20,7 @@ import argparse
 import logging
 import math
 import os
+import time
 import random
 import shutil
 from pathlib import Path
@@ -754,13 +755,19 @@ def _t_stats(t, label, max_print=None):
 
 
 def debug_dual_sft_step(logger, step, lq, gt, Yh_cur, Yl_cur, cond_dict,
-                         sft_adapter, loss_mse, loss_freq=None):
+                         sft_adapter, loss_mse, loss_freq=None,
+                         vae_decode_info=None, step_time=None,
+                         freq_step=False):
     """One-shot verbose debug print for the dual-SFT path.
 
     Prints (1) DT-CWT subband magnitude/phase stats per level,
-    (2) HIGH/LOW gamma/beta encoder outputs (i.e. what is fed into U-Net),
-    (3) per-PerLevelProcessor weight + gradient norms (proves params learn),
-    (4) loss components.
+    (2) HIGH/LOW gamma/beta encoder outputs (incl. spatial std and
+    LOW-vs-HIGH deviation comparison),
+    (3) per-PerLevelProcessor weight + gradient norms (proves params
+    learn),
+    (4) VAE-decode RGB stats and timing when freq loss runs,
+    (5) GPU memory peak and approximate steps/sec,
+    (6) loss components.
     """
     logger.info(f"========== [DEBUG dual-SFT] step={step} ==========")
 
@@ -791,22 +798,42 @@ def debug_dual_sft_step(logger, step, lq, gt, Yh_cur, Yl_cur, cond_dict,
     logger.info(_t_stats(cond_dict.get("high_gamma"), "  HIGH.gamma"))
     logger.info(_t_stats(cond_dict.get("high_beta"), "  HIGH.beta"))
 
-    # gamma/beta deviation from identity (gamma=1, beta=0)
+    # gamma/beta deviation from identity (gamma=1, beta=0) and spatial std
     g_low = cond_dict.get("low_gamma")
     b_low = cond_dict.get("low_beta")
     g_high = cond_dict.get("high_gamma")
     b_high = cond_dict.get("high_beta")
+
+    low_dev_g = low_dev_b = high_dev_g = high_dev_b = float("nan")
+
     if g_low is not None and b_low is not None:
+        low_dev_g = (g_low.float() - 1).abs().mean().item()
+        low_dev_b = b_low.float().abs().mean().item()
+        # Spatial std across (H, W) per (B, C), then mean — measures how much
+        # the modulation varies across spatial positions (selectivity).
+        gl_sp = g_low.float().std(dim=(-2, -1)).mean().item()
+        bl_sp = b_low.float().std(dim=(-2, -1)).mean().item()
         logger.info(
-            f"  LOW deviation from identity: "
-            f"|gamma-1| mean={(g_low.float()-1).abs().mean().item():.4e}, "
-            f"|beta| mean={b_low.float().abs().mean().item():.4e}"
+            f"  LOW  dev: |gamma-1| mean={low_dev_g:.4e}, "
+            f"|beta| mean={low_dev_b:.4e}, "
+            f"spatial_std(gamma)={gl_sp:.4e}, spatial_std(beta)={bl_sp:.4e}"
         )
     if g_high is not None and b_high is not None:
+        high_dev_g = (g_high.float() - 1).abs().mean().item()
+        high_dev_b = b_high.float().abs().mean().item()
+        gh_sp = g_high.float().std(dim=(-2, -1)).mean().item()
+        bh_sp = b_high.float().std(dim=(-2, -1)).mean().item()
         logger.info(
-            f"  HIGH deviation from identity: "
-            f"|gamma-1| mean={(g_high.float()-1).abs().mean().item():.4e}, "
-            f"|beta| mean={b_high.float().abs().mean().item():.4e}"
+            f"  HIGH dev: |gamma-1| mean={high_dev_g:.4e}, "
+            f"|beta| mean={high_dev_b:.4e}, "
+            f"spatial_std(gamma)={gh_sp:.4e}, spatial_std(beta)={bh_sp:.4e}"
+        )
+    # LOW vs HIGH deviation ratio (which region modulates more)
+    if not (low_dev_g != low_dev_g or high_dev_g != high_dev_g):  # not NaN
+        ratio = low_dev_g / max(high_dev_g, 1e-12)
+        logger.info(
+            f"  LOW/HIGH gamma deviation ratio = {ratio:.3f} "
+            f"({'LOW dominates structure' if ratio > 1.1 else ('HIGH dominates detail' if ratio < 0.9 else 'balanced')})"
         )
 
     # (4) PerLevelProcessor weight stats and gradient norms
@@ -849,11 +876,70 @@ def debug_dual_sft_step(logger, step, lq, gt, Yh_cur, Yl_cur, cond_dict,
         except Exception:
             pass
 
-    # (5) Losses
+    # (5) Per-level weight norm comparison (multi-level utilization)
+    logger.info("  --- Per-level weight-norm comparison ---")
+    proc_norms = {}
+    for proc_name in ("proc_j1", "proc_j2", "proc_j3", "proc_j4"):
+        proc = getattr(sft_adapter, proc_name, None)
+        if proc is None:
+            continue
+        total = 0.0
+        cnt = 0
+        for p in proc.parameters():
+            total += p.detach().float().norm().item() ** 2
+            cnt += 1
+        proc_norms[proc_name] = total ** 0.5
+    if proc_norms:
+        max_n = max(proc_norms.values())
+        line = "  "
+        for k, v in proc_norms.items():
+            ratio = v / max_n if max_n > 0 else 0.0
+            line += f"{k}={v:.3e} ({ratio*100:.0f}%)  "
+        logger.info(line.strip())
+
+    # (6) VAE decode info (RGB ranges, only when freq loss ran)
+    if vae_decode_info is not None:
+        logger.info("  --- VAE decode (this freq-loss step) ---")
+        x_pred = vae_decode_info.get("x_hr_pred")
+        x_gt = vae_decode_info.get("x_hr_gt")
+        if x_pred is not None:
+            logger.info(_t_stats(x_pred, "  x_HR_pred"))
+        if x_gt is not None:
+            logger.info(_t_stats(x_gt, "  x_HR_gt"))
+        yh_pred = vae_decode_info.get("yh_pred")
+        yh_gt = vae_decode_info.get("yh_gt")
+        if yh_pred is not None and yh_gt is not None:
+            for j in range(min(len(yh_pred), len(yh_gt))):
+                m_p = torch.sqrt(yh_pred[j][..., 0] ** 2 + yh_pred[j][..., 1] ** 2 + 1e-8).float().mean().item()
+                m_g = torch.sqrt(yh_gt[j][..., 0] ** 2 + yh_gt[j][..., 1] ** 2 + 1e-8).float().mean().item()
+                logger.info(f"  yh[{j}] mag pred={m_p:.4e} vs gt={m_g:.4e} (ratio={m_p/max(m_g,1e-12):.3f})")
+
+    # (7) Timing & GPU memory
+    if step_time is not None and step_time > 0:
+        logger.info(f"  step_time={step_time:.3f}s ({1.0/step_time:.2f} steps/sec) "
+                    f"freq_loss_active={bool(freq_step)}")
+    if torch.cuda.is_available():
+        peak_mb = torch.cuda.max_memory_allocated() / 1024 / 1024
+        cur_mb = torch.cuda.memory_allocated() / 1024 / 1024
+        logger.info(f"  cuda mem: current={cur_mb:.1f} MB, peak={peak_mb:.1f} MB")
+        torch.cuda.reset_peak_memory_stats()
+
+    # (8) Losses
     logger.info("  --- Loss components ---")
     logger.info(f"  loss_mse  = {float(loss_mse):.6e}")
     if loss_freq is not None:
         logger.info(f"  loss_freq = {float(loss_freq):.6e}")
+        # Loss balance ratio (warning if imbalanced)
+        try:
+            r = float(loss_freq) / max(float(loss_mse), 1e-12)
+            warn = ""
+            if r > 10:
+                warn = "  ⚠️ freq dominates (consider lambda_freq down)"
+            elif r < 0.01:
+                warn = "  ⚠️ freq negligible (consider lambda_freq up)"
+            logger.info(f"  loss_freq/loss_mse ratio = {r:.3f}{warn}")
+        except Exception:
+            pass
     logger.info(f"================ [DEBUG end] ====================")
 
 
@@ -1295,6 +1381,7 @@ def main(args):
         encoder_hidden_states = text_encoder(tokenization.input_ids.to(accelerator.device))[0]
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
+            _step_start_t = time.perf_counter()
             with accelerator.accumulate(controlnet, sft_adapter):
                 # Prepare images
                 lq = batch['lq']
@@ -1454,6 +1541,7 @@ def main(args):
                     # Frequency-separated loss in RGB space, applied every
                     # `freq_loss_interval` steps to amortize VAE decode cost.
                     apply_freq = (global_step % max(1, args.freq_loss_interval) == 0)
+                    _vae_decode_info = None
                     if apply_freq:
                         from util.frequency_utils import frequency_separated_loss
                         approximated_x0_latent = noise_scheduler.get_approximated_x0(
@@ -1472,6 +1560,14 @@ def main(args):
                             lambda_low=args.lambda_freq_low,
                             lambda_lp=1.0,
                         )
+                        # Cache for debug
+                        if args.debug_dual_sft > 0:
+                            _vae_decode_info = {
+                                "x_hr_pred": x_hr_pred,
+                                "x_hr_gt": gt,
+                                "yh_pred": Yh_pred,
+                                "yh_gt": Yh_gt,
+                            }
                     else:
                         loss_freq = torch.zeros((), device=model_pred.device)
                     loss_wav = loss_freq  # logged under same name for consistency
@@ -1499,11 +1595,19 @@ def main(args):
                     and accelerator.is_main_process
                     and (global_step % args.debug_dual_sft == 0)
                 ):
+                    _step_t = None
+                    try:
+                        _step_t = time.perf_counter() - _step_start_t  # type: ignore[name-defined]
+                    except Exception:
+                        _step_t = None
                     debug_dual_sft_step(
                         logger, global_step, lq, gt, Yh_cur, Yl_cur, cond_dict,
                         accelerator.unwrap_model(sft_adapter),
                         loss_mse=loss_mse,
                         loss_freq=loss_wav if args.dual_sft else None,
+                        vae_decode_info=_vae_decode_info if args.dual_sft else None,
+                        step_time=_step_t,
+                        freq_step=(args.dual_sft and apply_freq if args.dual_sft else False),
                     )
 
                 optimizer.step()
