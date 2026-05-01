@@ -869,12 +869,6 @@ def debug_dual_sft_step(logger, step, lq, gt, Yh_cur, Yl_cur, cond_dict,
             )
         except Exception as e:
             logger.warn(f"  {proc_name} bias stats failed: {e}")
-        # res_alpha (zero-init learnable scalar)
-        try:
-            a = proc.res_alpha.detach().float().item()
-            logger.info(f"  {proc_name}.res_alpha: {a:+.4e} (init=0.0)")
-        except Exception:
-            pass
 
     # (5) Per-level weight norm comparison (multi-level utilization)
     logger.info("  --- Per-level weight-norm comparison ---")
