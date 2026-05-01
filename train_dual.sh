@@ -33,6 +33,7 @@ accelerate launch --num_processes $NUM_PROCESSES --main_process_port 29501 train
  --max_train_steps=20000 \
  --enable_xformers_memory_efficient_attention \
  --dual_sft \
+ --debug_dual_sft=100 \
  --freq_loss_interval=4 \
  --lambda_freq=1.0 \
  --lambda_freq_high=0.1 \

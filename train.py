@@ -643,6 +643,16 @@ def parse_args(input_args=None):
         help="Weight for the low-frequency (mag+phase) component within freq loss.",
     )
     parser.add_argument(
+        "--debug_dual_sft",
+        type=int,
+        default=0,
+        help=(
+            "If > 0 and --dual_sft is set, print verbose debug statistics about "
+            "DT-CWT subbands, magnitude/phase, encoder outputs, SFT params, and "
+            "gradient norms every N training steps. 0 disables (default)."
+        ),
+    )
+    parser.add_argument(
         "--tracker_project_name",
         type=str,
         default="train_controlnet",
@@ -725,6 +735,126 @@ def log_sft_summary(accelerator, sft_adapter, feature_channels, cond_channels=36
         logger.info(str(summary(sft_adapter, input_data=[x, cond], verbose=0)))
     except Exception as e:
         logger.warn(f"torchinfo summary failed: {e}")
+
+
+def _t_stats(t, label, max_print=None):
+    """Compact tensor stats for debug logging."""
+    if t is None:
+        return f"{label}=None"
+    if not torch.is_tensor(t):
+        return f"{label}<not-tensor>"
+    fl = t.detach().float()
+    finite = torch.isfinite(fl).all().item()
+    return (
+        f"{label} shape={tuple(t.shape)} dtype={t.dtype} "
+        f"mean={fl.mean().item():+.4e} std={fl.std().item():+.4e} "
+        f"min={fl.min().item():+.4e} max={fl.max().item():+.4e} "
+        f"finite={finite}"
+    )
+
+
+def debug_dual_sft_step(logger, step, lq, gt, Yh_cur, Yl_cur, cond_dict,
+                         sft_adapter, loss_mse, loss_freq=None):
+    """One-shot verbose debug print for the dual-SFT path.
+
+    Prints (1) DT-CWT subband magnitude/phase stats per level,
+    (2) HIGH/LOW gamma/beta encoder outputs (i.e. what is fed into U-Net),
+    (3) per-PerLevelProcessor weight + gradient norms (proves params learn),
+    (4) loss components.
+    """
+    logger.info(f"========== [DEBUG dual-SFT] step={step} ==========")
+
+    # (1) Inputs
+    logger.info(_t_stats(lq, "input.lq"))
+    logger.info(_t_stats(gt, "input.gt"))
+
+    # (2) DT-CWT subbands per level
+    for j, yh_j in enumerate(Yh_cur):
+        real = yh_j[..., 0]
+        imag = yh_j[..., 1]
+        mag = torch.sqrt(real * real + imag * imag + 1e-8)
+        phase = torch.atan2(imag, real)
+        logger.info(
+            f"  yh[{j}] (j={j+1}): subband shape={tuple(yh_j.shape)} "
+            f"mag(mean={mag.float().mean().item():.4e}, max={mag.float().max().item():.4e}) "
+            f"phase(mean={phase.float().mean().item():+.4e}, "
+            f"|phase|_mean={phase.float().abs().mean().item():.4e}) "
+            f"real_range=[{real.float().min().item():+.3e}, {real.float().max().item():+.3e}]"
+        )
+    if Yl_cur is not None:
+        logger.info(_t_stats(Yl_cur, "  yl (lowpass)"))
+
+    # (3) Encoder outputs (what gets injected into U-Net)
+    logger.info("  --- Encoder outputs (UNet input) ---")
+    logger.info(_t_stats(cond_dict.get("low_gamma"), "  LOW.gamma"))
+    logger.info(_t_stats(cond_dict.get("low_beta"), "  LOW.beta"))
+    logger.info(_t_stats(cond_dict.get("high_gamma"), "  HIGH.gamma"))
+    logger.info(_t_stats(cond_dict.get("high_beta"), "  HIGH.beta"))
+
+    # gamma/beta deviation from identity (gamma=1, beta=0)
+    g_low = cond_dict.get("low_gamma")
+    b_low = cond_dict.get("low_beta")
+    g_high = cond_dict.get("high_gamma")
+    b_high = cond_dict.get("high_beta")
+    if g_low is not None and b_low is not None:
+        logger.info(
+            f"  LOW deviation from identity: "
+            f"|gamma-1| mean={(g_low.float()-1).abs().mean().item():.4e}, "
+            f"|beta| mean={b_low.float().abs().mean().item():.4e}"
+        )
+    if g_high is not None and b_high is not None:
+        logger.info(
+            f"  HIGH deviation from identity: "
+            f"|gamma-1| mean={(g_high.float()-1).abs().mean().item():.4e}, "
+            f"|beta| mean={b_high.float().abs().mean().item():.4e}"
+        )
+
+    # (4) PerLevelProcessor weight stats and gradient norms
+    logger.info("  --- PerLevelProcessor params + gradients ---")
+    for proc_name in ("proc_j1", "proc_j2", "proc_j3", "proc_j4"):
+        proc = getattr(sft_adapter, proc_name, None)
+        if proc is None:
+            continue
+        # Weight norm of magnitude pathway pointwise conv (proxy for learning signal)
+        try:
+            w_M_pw = proc.M_pw.weight
+            g_M_pw = w_M_pw.grad
+            w_norm = w_M_pw.detach().float().norm().item()
+            g_norm = g_M_pw.detach().float().norm().item() if g_M_pw is not None else float('nan')
+            logger.info(
+                f"  {proc_name}.M_pw: w_norm={w_norm:.4e}, g_norm={g_norm:.4e}"
+            )
+        except Exception as e:
+            logger.warn(f"  {proc_name} stats failed: {e}")
+        # SFT gamma/beta head bias (tracks identity-shift learning)
+        try:
+            g_bias = proc.sft_gamma.conv2.bias.detach().float()
+            b_bias = proc.sft_beta.conv2.bias.detach().float()
+            logger.info(
+                f"  {proc_name}.sft_gamma.bias: "
+                f"mean={g_bias.mean().item():+.4e} (init=1.0), "
+                f"std={g_bias.std().item():.4e}"
+            )
+            logger.info(
+                f"  {proc_name}.sft_beta.bias:  "
+                f"mean={b_bias.mean().item():+.4e} (init=0.0), "
+                f"std={b_bias.std().item():.4e}"
+            )
+        except Exception as e:
+            logger.warn(f"  {proc_name} bias stats failed: {e}")
+        # res_alpha (zero-init learnable scalar)
+        try:
+            a = proc.res_alpha.detach().float().item()
+            logger.info(f"  {proc_name}.res_alpha: {a:+.4e} (init=0.0)")
+        except Exception:
+            pass
+
+    # (5) Losses
+    logger.info("  --- Loss components ---")
+    logger.info(f"  loss_mse  = {float(loss_mse):.6e}")
+    if loss_freq is not None:
+        logger.info(f"  loss_freq = {float(loss_freq):.6e}")
+    logger.info(f"================ [DEBUG end] ====================")
 
 
 _NAN_DEBUG = os.environ.get("DEBUG_NAN", "0") == "1"
@@ -1362,6 +1492,20 @@ def main(args):
                 if accelerator.sync_gradients:
                     params_to_clip = list(controlnet.parameters()) + list(sft_adapter.parameters())
                     grad_norm = accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+
+                # Verbose dual-SFT debug (after backward so gradients are populated)
+                if (
+                    args.dual_sft and args.debug_dual_sft > 0
+                    and accelerator.is_main_process
+                    and (global_step % args.debug_dual_sft == 0)
+                ):
+                    debug_dual_sft_step(
+                        logger, global_step, lq, gt, Yh_cur, Yl_cur, cond_dict,
+                        accelerator.unwrap_model(sft_adapter),
+                        loss_mse=loss_mse,
+                        loss_freq=loss_wav if args.dual_sft else None,
+                    )
+
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=args.set_grads_to_none)
