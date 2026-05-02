@@ -52,6 +52,20 @@ parser.add_argument(
          "(FrequencyConditioningEncoder + UNetWithDualSFT, DT-CWT J=4) "
          "matching --dual_sft training. Requires --sft_ckpt.",
 )
+parser.add_argument(
+    "--num_shards",
+    type=int,
+    default=1,
+    help="Total number of shards to split the input sequences across. "
+         "Combine with --shard_id to run on multiple GPUs in parallel.",
+)
+parser.add_argument(
+    "--shard_id",
+    type=int,
+    default=0,
+    help="0-indexed shard id for this process; processes "
+         "seqs[shard_id::num_shards].",
+)
 args = parser.parse_args()
 
 print("Run with arguments:")
@@ -127,6 +141,12 @@ else:
 
 # iterate for every video sequence in the input folder
 seqs = sorted(os.listdir(args.in_path))
+if args.num_shards > 1:
+    if not (0 <= args.shard_id < args.num_shards):
+        raise ValueError(f"--shard_id must be in [0, {args.num_shards}); got {args.shard_id}")
+    total = len(seqs)
+    seqs = seqs[args.shard_id::args.num_shards]
+    print(f"  Sharding: shard {args.shard_id}/{args.num_shards} -> {len(seqs)}/{total} sequences")
 for seq in seqs:
     frame_names = sorted(os.listdir(os.path.join(args.in_path, seq)))
     frames = []
