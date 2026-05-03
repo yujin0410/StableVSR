@@ -66,6 +66,20 @@ parser.add_argument(
     help="0-indexed shard id for this process; processes "
          "seqs[shard_id::num_shards].",
 )
+parser.add_argument(
+    "--no_high_sft",
+    action="store_true",
+    help="Ablation: replace high_gamma with ones and high_beta with zeros "
+         "after the encoder forward, so up_blocks[1] passes through unchanged. "
+         "Requires --dual_sft.",
+)
+parser.add_argument(
+    "--no_low_sft",
+    action="store_true",
+    help="Ablation: replace low_gamma with ones and low_beta with zeros "
+         "after the encoder forward, so down_blocks[1] passes through unchanged. "
+         "Requires --dual_sft.",
+)
 args = parser.parse_args()
 
 print("Run with arguments:")
@@ -111,6 +125,31 @@ if args.sft_ckpt is not None:
         sft_adapter = sft_adapter.to(device)
         sft_adapter.eval()
         sft_adapter.requires_grad_(False)
+
+        if args.no_high_sft or args.no_low_sft:
+            base_encoder = sft_adapter
+
+            class AblatedEncoder(torch.nn.Module):
+                def __init__(self, base, no_high, no_low):
+                    super().__init__()
+                    self.base = base
+                    self.no_high = no_high
+                    self.no_low = no_low
+
+                def forward(self, yh, yl=None):
+                    out = self.base(yh, yl)
+                    if self.no_high:
+                        out['high_gamma'] = torch.ones_like(out['high_gamma'])
+                        out['high_beta'] = torch.zeros_like(out['high_beta'])
+                    if self.no_low:
+                        out['low_gamma'] = torch.ones_like(out['low_gamma'])
+                        out['low_beta'] = torch.zeros_like(out['low_beta'])
+                    return out
+
+            sft_adapter = AblatedEncoder(base_encoder, args.no_high_sft, args.no_low_sft).to(device)
+            sft_adapter.eval()
+            sft_adapter.requires_grad_(False)
+            print(f"  Ablation: no_high_sft={args.no_high_sft}, no_low_sft={args.no_low_sft}")
 
         unet_with_sft = UNetWithDualSFT(pipeline.unet)
         unet_with_sft.cond_encoder = sft_adapter
