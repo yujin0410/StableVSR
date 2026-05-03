@@ -84,6 +84,13 @@ for seq in seqs:
                 gt = CenterCrop((h, w))(gt)
                 rec = CenterCrop((h, w))(rec)
 
+            # Crop to multiple of 8 (RAFT optical flow requirement for tOF).
+            h_, w_ = gt.shape[-2], gt.shape[-1]
+            h8, w8 = h_ - h_ % 8, w_ - w_ % 8
+            if (h8, w8) != (h_, w_):
+                gt = CenterCrop((h8, w8))(gt)
+                rec = CenterCrop((h8, w8))(rec)
+
             psnr_value = psnr(gt, rec)
             ssim_value = ssim(gt, rec)
             lpips_value = lpips(gt, rec)
