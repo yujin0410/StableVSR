@@ -54,6 +54,24 @@ results = {
 methods = ["StableVSR (baseline)", "BasicVSR++", "Ours (dual-SFT)"]
 datasets = ["REDS4", "Vid4", "UDM10", "SPMCS"]
 
+# Inference-time ablations on REDS4: each disables a SFT injection by
+# replacing gamma=1, beta=0 (identity passthrough) at inference.
+ablation_results = {
+    "Ours full":  {"PSNR": 24.48, "SSIM": 0.691, "LPIPS": 0.193, "DISTS": 0.088,
+                   "MUSIQ": 65.70, "CLIP-IQA": 0.386, "NIQE": 2.77,
+                   "tLPIPS": 15.25, "tOF": 11.12},
+    "w/o HIGH":   {"PSNR": 24.34, "SSIM": 0.689, "LPIPS": 0.223, "DISTS": 0.104,
+                   "MUSIQ": 64.49, "CLIP-IQA": 0.365, "NIQE": 3.00,
+                   "tLPIPS": 22.11, "tOF": 11.984},
+    "w/o LOW":    {"PSNR": 24.70, "SSIM": 0.701, "LPIPS": 0.210, "DISTS": 0.098,
+                   "MUSIQ": 63.39, "CLIP-IQA": 0.335, "NIQE": 3.00,
+                   "tLPIPS": 16.57, "tOF": 11.392},
+    "w/o both":   {"PSNR": 24.46, "SSIM": 0.695, "LPIPS": 0.247, "DISTS": 0.119,
+                   "MUSIQ": 59.35, "CLIP-IQA": 0.298, "NIQE": 3.29,
+                   "tLPIPS": 25.18, "tOF": 12.278},
+}
+ablation_order = ["Ours full", "w/o HIGH", "w/o LOW", "w/o both"]
+
 direction = {
     "PSNR": "↑", "SSIM": "↑",
     "LPIPS": "↓", "DISTS": "↓",
@@ -243,7 +261,85 @@ for c in range(2, len(all_metrics) + 2):
     ws2.column_dimensions[get_column_letter(c)].width = 11
 
 
-# ============== Sheet 3: Notes ==============
+# ============== Sheet 3: Ablation (REDS4) ==============
+ws_abl = wb.create_sheet("Ablation (REDS4)")
+row = 1
+
+cell = ws_abl.cell(row=row, column=1, value="Inference-time Ablation on REDS4")
+cell.font = Font(bold=True, size=12, color="FFFFFF")
+cell.fill = header_fill
+cell.alignment = center
+cell.border = border
+ws_abl.merge_cells(start_row=row, start_column=1,
+                   end_row=row, end_column=1 + len(all_metrics))
+row += 1
+
+# group + metric headers
+ws_abl.cell(row=row, column=1, value="Variant").font = header_font
+ws_abl.cell(row=row, column=1).fill = header_fill
+ws_abl.cell(row=row, column=1).alignment = center
+ws_abl.cell(row=row, column=1).border = border
+col = 2
+for gname, gmetrics in groups:
+    span = len(gmetrics)
+    c = ws_abl.cell(row=row, column=col, value=gname)
+    c.font = header_font
+    c.fill = header_fill
+    c.alignment = center
+    if span > 1:
+        ws_abl.merge_cells(start_row=row, start_column=col,
+                           end_row=row, end_column=col + span - 1)
+    for k in range(col, col + span):
+        ws_abl.cell(row=row, column=k).border = border
+    col += span
+row += 1
+
+ws_abl.cell(row=row, column=1, value="").fill = group_fill
+ws_abl.cell(row=row, column=1).border = border
+for i, m in enumerate(all_metrics, start=2):
+    c = ws_abl.cell(row=row, column=i, value=f"{m} {direction[m]}")
+    c.font = metric_font
+    c.fill = group_fill
+    c.alignment = center
+    c.border = border
+row += 1
+
+# Ablation rows + bold best per column
+ablation_rows = {}
+for variant in ablation_order:
+    ablation_rows[variant] = row
+    c = ws_abl.cell(row=row, column=1, value=variant)
+    c.font = metric_font
+    c.alignment = center
+    c.border = border
+    c.fill = ds_fill
+    for i, m in enumerate(all_metrics, start=2):
+        v = ablation_results[variant][m]
+        cell = ws_abl.cell(row=row, column=i, value=v)
+        cell.alignment = center
+        cell.border = border
+        if m in ("PSNR", "MUSIQ", "tLPIPS"):
+            cell.number_format = "0.00"
+        elif m in ("NIQE", "tOF"):
+            cell.number_format = "0.000"
+        else:
+            cell.number_format = "0.000"
+    row += 1
+
+for i, m in enumerate(all_metrics, start=2):
+    vals = [(v, ablation_results[v][m]) for v in ablation_order]
+    if direction[m] == "↑":
+        best = max(vals, key=lambda x: x[1])[0]
+    else:
+        best = min(vals, key=lambda x: x[1])[0]
+    ws_abl.cell(row=ablation_rows[best], column=i).font = best_font
+
+ws_abl.column_dimensions["A"].width = 14
+for c in range(2, len(all_metrics) + 2):
+    ws_abl.column_dimensions[get_column_letter(c)].width = 11
+
+
+# ============== Sheet 4: Notes ==============
 ws3 = wb.create_sheet("Notes")
 notes = [
     "VSR Evaluation: Ours (dual-SFT) vs BasicVSR++",
@@ -271,7 +367,17 @@ notes = [
     "  - Ours wins on perceptual metrics (LPIPS, DISTS, MUSIQ, CLIP-IQA, NIQE).",
     "  - BasicVSR++ wins on PSNR/SSIM and temporal stability (tLPIPS, tOF).",
     "  - This perceptual-vs-fidelity trade-off matches StableVSR paper's findings.",
-    "  - BasicVSR++ values for REDS4 / UDM10 not measured here; add if needed.",
+    "",
+    "Ablation (REDS4, inference-time disabling):",
+    "  - 'w/o HIGH': replace high_gamma=1, high_beta=0 (up_blocks[1] passthrough)",
+    "  - 'w/o LOW' : replace low_gamma=1,  low_beta=0  (down_blocks[1] passthrough)",
+    "  - 'w/o both': both disabled (both injection points are passthrough)",
+    "  Interpretation:",
+    "    * HIGH disabled hurts temporal stability (tLPIPS +45%) most",
+    "    * LOW disabled hurts naturalness (MUSIQ, CLIP-IQA) most",
+    "    * Both disabled is consistently worst on perceptual metrics",
+    "    * w/o LOW slightly improves PSNR/SSIM (perceptual-distortion trade-off)",
+    "    * Synergy: LPIPS w/o-both (0.247) > w/o-HIGH (0.223) + w/o-LOW (0.210) bias",
 ]
 for i, line in enumerate(notes, start=1):
     cell = ws3.cell(row=i, column=1, value=line)
