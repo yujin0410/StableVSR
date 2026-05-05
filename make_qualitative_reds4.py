@@ -43,7 +43,7 @@ def load_lr_upscaled(path):
 
 
 def make_figure(seq, frame_idx, crop_xywh, output_path,
-                box_lw=3, fontsize=16, dpi=300):
+                box_lw=3, fontsize=16, dpi=300, png_only=False):
     x, y, w, h = crop_xywh
     n = len(PATHS)
     fig, axes = plt.subplots(2, n, figsize=(4 * n, 5))
@@ -71,12 +71,13 @@ def make_figure(seq, frame_idx, crop_xywh, output_path,
     plt.tight_layout(pad=0.5, h_pad=0.3, w_pad=0.3)
     out_dir = os.path.dirname(output_path) or '.'
     os.makedirs(out_dir, exist_ok=True)
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     png_path = os.path.splitext(output_path)[0] + '.png'
     plt.savefig(png_path, dpi=200, bbox_inches='tight')
-    plt.close()
-    print(f"Saved: {output_path}")
     print(f"Saved: {png_path}")
+    if not png_only:
+        plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+        print(f"Saved: {output_path}")
+    plt.close()
 
 
 if __name__ == '__main__':
@@ -87,6 +88,8 @@ if __name__ == '__main__':
                    metavar=('X', 'Y', 'W', 'H'),
                    help="crop region in HR (1280x720) coordinates")
     p.add_argument('--output', default='figures/qualitative_reds4.pdf')
+    p.add_argument('--png_only', action='store_true',
+                   help="skip PDF (much faster for batch generation)")
     args = p.parse_args()
 
     make_figure(
@@ -94,4 +97,5 @@ if __name__ == '__main__':
         frame_idx=args.frame,
         crop_xywh=tuple(args.crop),
         output_path=args.output,
+        png_only=args.png_only,
     )
