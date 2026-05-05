@@ -39,8 +39,10 @@ def main():
     p.add_argument('--log_dir',
                    default='experiments/20260430_dualsft/logs/train_controlnet')
     p.add_argument('--output', default='figures/training_curves.pdf')
-    p.add_argument('--smooth', type=float, default=0.7,
-                   help="EMA smoothing weight (0=raw, 0.9=heavy)")
+    p.add_argument('--smooth', type=float, default=0.95,
+                   help="EMA smoothing weight (0=raw, 0.95=strong)")
+    p.add_argument('--show_raw', action='store_true',
+                   help="overlay raw curve in light gray")
     args = p.parse_args()
 
     df = load_scalars(args.log_dir)
@@ -63,14 +65,13 @@ def main():
             continue
         x = sub['step'].values
         y = sub['value'].values
-        axes[i].plot(x, y, color='lightgray', alpha=0.5, label='raw')
-        axes[i].plot(x, smooth(y, args.smooth), color='C3', linewidth=2,
-                     label=f'EMA({args.smooth})')
+        if args.show_raw:
+            axes[i].plot(x, y, color='lightgray', alpha=0.4, linewidth=0.5)
+        axes[i].plot(x, smooth(y, args.smooth), color='C3', linewidth=2)
         axes[i].set_xlabel('Step', fontsize=12)
         axes[i].set_ylabel(ylabel, fontsize=12)
         axes[i].set_title(ylabel, fontsize=13)
         axes[i].grid(True, linestyle='--', alpha=0.4)
-        axes[i].legend(fontsize=10)
         if 'loss' in tag:
             axes[i].set_yscale('log')
 
