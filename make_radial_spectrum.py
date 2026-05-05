@@ -92,30 +92,95 @@ def main():
     p.add_argument('--seq', default='000')
     p.add_argument('--num_frames', type=int, default=100)
     p.add_argument('--output', default='figures/radial_spectrum.pdf')
+    p.add_argument('--ratio', action='store_true',
+                   help="plot power ratio (method/GT) instead of raw spectrum")
+    p.add_argument('--combined', action='store_true',
+                   help="2-panel: top=raw spectrum, bottom=ratio")
+    p.add_argument('--xmin', type=float, default=None,
+                   help="optional lower x-limit for highlighting high-freq")
     args = p.parse_args()
 
-    plt.figure(figsize=(8, 6))
-
+    spectra = {}
     for name, tmpl in PATHS.items():
         prof = compute_method_spectrum(args.seq, name, tmpl, args.num_frames)
         if prof is None:
             print(f"  Skipping {name}: no frames found.")
             continue
-        # normalized frequency (0 to 0.5 cycles/pixel)
-        freq = np.arange(len(prof)) / (2 * len(prof))
-        # avoid log(0)
-        prof = np.maximum(prof, 1e-12)
-        plt.plot(freq, prof, label=name,
-                 color=COLORS[name], linestyle=LINESTYLES[name], linewidth=2)
+        spectra[name] = prof
 
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.xlabel('Spatial frequency (cycles/pixel)', fontsize=14)
-    plt.ylabel('Radial-averaged power', fontsize=14)
-    plt.title(f'Radial 2D-FFT power spectrum (REDS4 seq {args.seq}, '
-              f'avg over {args.num_frames} frames)', fontsize=12)
-    plt.legend(fontsize=12, loc='lower left')
-    plt.grid(True, which='both', linestyle='--', alpha=0.4)
+    # align lengths
+    L = min(len(p) for p in spectra.values())
+    spectra = {k: v[:L] for k, v in spectra.items()}
+    freq = np.arange(L) / (2 * L)
+
+    if args.combined:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 9), sharex=True)
+        for name, prof in spectra.items():
+            prof = np.maximum(prof, 1e-12)
+            ax1.plot(freq, prof, label=name,
+                     color=COLORS[name], linestyle=LINESTYLES[name], linewidth=2)
+        ax1.set_xscale('log'); ax1.set_yscale('log')
+        ax1.set_ylabel('Radial-averaged power', fontsize=14)
+        ax1.set_title(f'Radial 2D-FFT power spectrum (REDS4 seq {args.seq})', fontsize=12)
+        ax1.legend(fontsize=11, loc='lower left')
+        ax1.grid(True, which='both', linestyle='--', alpha=0.4)
+
+        gt = spectra.get('GT')
+        if gt is not None:
+            for name, prof in spectra.items():
+                if name == 'GT':
+                    continue
+                ratio = np.maximum(prof, 1e-12) / np.maximum(gt, 1e-12)
+                ax2.plot(freq, ratio, label=name,
+                         color=COLORS[name], linestyle=LINESTYLES[name], linewidth=2)
+            ax2.axhline(1.0, color='black', linestyle='--', linewidth=1, alpha=0.6, label='GT (= 1.0)')
+        ax2.set_xscale('log')
+        ax2.set_ylabel('Power / Power(GT)', fontsize=14)
+        ax2.set_xlabel('Spatial frequency (cycles/pixel)', fontsize=14)
+        ax2.set_ylim(0, 1.1)
+        ax2.legend(fontsize=11, loc='lower left')
+        ax2.grid(True, which='both', linestyle='--', alpha=0.4)
+
+        if args.xmin is not None:
+            ax1.set_xlim(left=args.xmin)
+            ax2.set_xlim(left=args.xmin)
+
+        plt.tight_layout()
+    elif args.ratio:
+        plt.figure(figsize=(8, 5))
+        gt = spectra['GT']
+        for name, prof in spectra.items():
+            if name == 'GT':
+                continue
+            ratio = np.maximum(prof, 1e-12) / np.maximum(gt, 1e-12)
+            plt.plot(freq, ratio, label=name,
+                     color=COLORS[name], linestyle=LINESTYLES[name], linewidth=2)
+        plt.axhline(1.0, color='black', linestyle='--', linewidth=1, alpha=0.6, label='GT (= 1.0)')
+        plt.xscale('log')
+        plt.xlabel('Spatial frequency (cycles/pixel)', fontsize=14)
+        plt.ylabel('Power / Power(GT)', fontsize=14)
+        plt.title(f'Power ratio to GT (REDS4 seq {args.seq})', fontsize=12)
+        plt.ylim(0, 1.1)
+        plt.legend(fontsize=11, loc='lower left')
+        plt.grid(True, which='both', linestyle='--', alpha=0.4)
+        if args.xmin is not None:
+            plt.xlim(left=args.xmin)
+        plt.tight_layout()
+    else:
+        plt.figure(figsize=(8, 6))
+        for name, prof in spectra.items():
+            prof = np.maximum(prof, 1e-12)
+            plt.plot(freq, prof, label=name,
+                     color=COLORS[name], linestyle=LINESTYLES[name], linewidth=2)
+        plt.xscale('log'); plt.yscale('log')
+        plt.xlabel('Spatial frequency (cycles/pixel)', fontsize=14)
+        plt.ylabel('Radial-averaged power', fontsize=14)
+        plt.title(f'Radial 2D-FFT power spectrum (REDS4 seq {args.seq}, '
+                  f'avg over {args.num_frames} frames)', fontsize=12)
+        plt.legend(fontsize=12, loc='lower left')
+        plt.grid(True, which='both', linestyle='--', alpha=0.4)
+        if args.xmin is not None:
+            plt.xlim(left=args.xmin)
 
     out_dir = os.path.dirname(args.output) or '.'
     os.makedirs(out_dir, exist_ok=True)
