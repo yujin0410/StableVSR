@@ -46,16 +46,19 @@ def main():
     # yh: list of 4, each [B=1, C=3, D=6, H_j, W_j, 2]
     # yl: [B=1, C=3, H/16, W/16] (real)
 
-    # --- Layout: 4 rows (levels) x 7 cols (6 directions + 1 lowpass at end) ---
-    fig = plt.figure(figsize=(20, 11))
+    # --- Layout: 6 rows x 7 cols
+    #     row 0: input image + lowpass
+    #     row 1: direction column headers
+    #     rows 2..5: j=1..4 subbands (4 levels)
+    fig = plt.figure(figsize=(20, 13))
     # Top: input image (small, top-left)
-    ax_img = plt.subplot2grid((5, 7), (0, 0), colspan=2, rowspan=1)
+    ax_img = plt.subplot2grid((6, 7), (0, 0), colspan=2, rowspan=1)
     ax_img.imshow(arr)
     ax_img.set_title('Input Image', fontsize=12)
     ax_img.axis('off')
 
     # Lowpass on top-right
-    ax_lp = plt.subplot2grid((5, 7), (0, 5), colspan=2, rowspan=1)
+    ax_lp = plt.subplot2grid((6, 7), (0, 5), colspan=2, rowspan=1)
     lp_vis = yl[0].mean(dim=0).cpu().numpy()  # avg over 3 colors
     ax_lp.imshow(lp_vis, cmap='gray')
     ax_lp.set_title(f'Lowpass (LL, j=4 size, real-valued)', fontsize=11)
@@ -63,12 +66,12 @@ def main():
 
     # Direction column headers (row 1)
     for d in range(6):
-        ax_h = plt.subplot2grid((5, 7), (1, d), rowspan=1)
+        ax_h = plt.subplot2grid((6, 7), (1, d), rowspan=1)
         ax_h.text(0.5, 0.3, f'd={d+1}\n{DIR_LABELS[d]}',
                   ha='center', va='center', fontsize=12, fontweight='bold',
                   transform=ax_h.transAxes)
         ax_h.axis('off')
-    ax_band = plt.subplot2grid((5, 7), (1, 6), rowspan=1)
+    ax_band = plt.subplot2grid((6, 7), (1, 6), rowspan=1)
     ax_band.text(0.5, 0.5, 'Band', ha='center', va='center',
                  fontsize=12, fontweight='bold', transform=ax_band.transAxes)
     ax_band.axis('off')
@@ -79,7 +82,7 @@ def main():
 
     for j in range(4):
         for d in range(6):
-            ax = plt.subplot2grid((5, 7), (j + 2, d), rowspan=1)
+            ax = plt.subplot2grid((6, 7), (j + 2, d), rowspan=1)
             sub = yh[j][0, :, d]   # [3, H_j, W_j, 2]
             mag = torch.sqrt(sub[..., 0] ** 2 + sub[..., 1] ** 2 + 1e-8)  # [3, H, W]
             mag = mag.mean(dim=0).cpu().numpy()  # avg over 3 colors → [H, W]
@@ -99,7 +102,7 @@ def main():
                         transform=ax.transAxes)
 
         # Band label on the right
-        ax_b = plt.subplot2grid((5, 7), (j + 2, 6), rowspan=1)
+        ax_b = plt.subplot2grid((6, 7), (j + 2, 6), rowspan=1)
         ax_b.text(0.05, 0.5, bands[j],
                   ha='left', va='center',
                   fontsize=14, fontweight='bold',
