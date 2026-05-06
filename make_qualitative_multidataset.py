@@ -36,11 +36,11 @@ DATASETS = {
         'GT':         '/mnt/HDD_raid1/yjcho/data/Vid4/GT/{seq}/{idx:08d}.png',
     },
     'udm10': {
-        'LR':         '/mnt/HDD_raid1/yjcho/data/UDM10/BIx4/{seq}/{idx:08d}.png',
-        'BasicVSR++': '/mnt/HDD_raid1/yjcho/BasicVSR_PlusPlus/udm10/{seq}/{idx:08d}.png',
-        'StableVSR':  '/mnt/HDD_raid1/yjcho/stablevsr_udm10/{seq}/{idx:08d}.png',
-        'Ours':       '/mnt/HDD_raid1/yjcho/20260430/udm10/{seq}/{idx:08d}.png',
-        'GT':         '/mnt/HDD_raid1/yjcho/data/UDM10/GT/{seq}/{idx:08d}.png',
+        'LR':         '/mnt/HDD_raid1/yjcho/data/UDM10/BIx4/{seq}/{idx:04d}.png',
+        'BasicVSR++': '/mnt/HDD_raid1/yjcho/BasicVSR_PlusPlus/udm10/{seq}/{idx:04d}.png',
+        'StableVSR':  '/mnt/HDD_raid1/yjcho/stablevsr_udm10/{seq}/{idx:04d}.png',
+        'Ours':       '/mnt/HDD_raid1/yjcho/20260430/udm10/{seq}/{idx:04d}.png',
+        'GT':         '/mnt/HDD_raid1/yjcho/data/UDM10/GT/{seq}/{idx:04d}.png',
     },
     'spmcs': {
         # SPMCS uses 4-digit frame naming and per-sequence variable starting index
