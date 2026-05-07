@@ -1,0 +1,41 @@
+\newpage
+\pagestyle{empty}
+\addcontentsline{toc}{chapter}{Abstract in Korean} % if {Bi---} is eliminated, it generates error
+
+\begin{center} {\Large{ABSTRACT IN KOREAN}}
+\vspace*{1cm}\\
+\Large 얼굴감정 인식을 위한 효율적 Few-shot 학습기법 기반 선택적 채널 공간관계 네트워크
+\vspace*{1cm}\\
+\normalsize
+김 채 린 \\숙명여자대학교 대학원 IT공학과 IT공학 전공
+\vspace*{1cm}
+\end{center}
+
+% \newpage
+% \rhead{ \textbf{\gt ABSTRACT IN KOREAN} \thepage}
+% \begin{center}
+%     \huge{ \bf 요 \ \ \ 약 \ \ \ 문}
+% \end{center}
+\vspace{0.5cm}
+
+
+얼굴 감정인식 (FER) 은 컴퓨터 비전 및 인간-컴퓨터 상호작용 (HCI) 분야에서 중요한 작업 중 하나이다. FER은 얼굴 표정을 통해 감정을 인식하면서 자율 주행, 로봇공학 및 e-러닝 향상과 같은 응용프로그램들에서 널리 사용되고 있다. 하지만 그 실용성에도 불구하고, 기존의 컨볼루션 신경망 (CNN) 기반 FER은 FER 데이터셋에서 제한된 수의 샘플로 인해 과적합 문제에 직면하고 있다.
+
+이 문제를 해결하기 위해 우리는 FER에 대한 퓨샷러닝 (FSL) 방법을 제안했다. FSL은 단 몇 개의 데이터만으로도 새로운 범주의 샘플을 예측할 수 있는 학습 메커니즘이다. FSL은 유사도 학습을 통해 데이터 간의 관계를 학습하고 
+테스트 데이터 또한 학습을 하는 방식과 같이 추론하며 작동한다. 이렇게 함으로써, FSL은 FER의 과적합 문제 해결에 도움을 줄 수 있다.
+
+본 연구에서는 데이터셋 간의 관계 유사성을 학습하는 relationNet을 사용하는 방법을 제안한다. RelationNet을 기반으로 채널 선택 모듈과 추가적인 공간 데이터 구성을 설계했다. 몇 개의 데이터셋으로부터 최적의 정보를 효과적으로 활용하기 위해 샘플 피쳐들의 평균 피쳐를 대표 피쳐로 선정하였다. 다음으로는 각 채널의 대표 피쳐를 샘플 피쳐의 각 채널 정보와 비교하여 어떤 샘플의 채널 피쳐가 가장 유사한 채널 정보를 갖는지 찾게된다. 채널 정보를 비교함으로써 선택된 샘플에서의 채널이 해당 샘플 피쳐의 최적의 채널로 간주되어 추출된다. 따라서 설계된 모듈에 의해 하나의 재구성된 피쳐는 각 샘플의 채널 정보들로 구성되었다. 또한, 세밀하다는 특징에 중점을 두어, 얼굴 표정이 눈과 입술 영역에서 중요한 정보를 가지고 있다는 것을 알아내었다. 따라서 눈과 입술 이미지 패치를 생성하고 이 추가 데이터를 서포트와 쿼리 셋으로 설정했다.
+
+선택된 최적의 피쳐와 추가적인 공간 정보가 일반화 성능을 향상시킬 수 있다는 것을 입증했다. 기존 방법과 비교하였을 때, RAFDB, FER2013, SFEW 및 AFEW 데이터셋에서의 평균 성능은 각각 3.5\%, 3.68\%, 5.58\%, 2.31\%의 정확도가 향상된다.
+
+
+
+
+\vfill
+\begin{flushleft}
+\begin{minipage}[t][20mm][b]{0.8\textwidth}
+\noindent\makebox[\linewidth]{\rule{\linewidth}{1pt}}
+{\bfseries 주제어}: 얼굴감정인식 (FER), 퓨샷러닝 (FSL), 컴퓨터 비전 (CV), 딥 러닝, 채널 선택적 공간정보\\
+{\bfseries 학번}: 2131610\\
+\end{minipage}
+\end{flushleft}

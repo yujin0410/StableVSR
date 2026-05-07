@@ -1,0 +1,256 @@
+% ------------------------------------------------------------------------
+% AMS-LaTeX definitions: DAL Thesis ++++ Alex, September 1994 ************
+% ------------------------------------------------------------------------
+% M.S. Thesis Defended on November 12, 2012
+% ------------------------------------------------------------------------
+\documentclass[12pt,a4paper,oneside]{thesis}
+
+% =====================================================================
+% [FIX] thesis.cls와 doublespace.sty의 1990년대식 \@xfloat 재정의가
+% 현재 LaTeX과 호환되지 않아 figure/table 환경 전체를 깨뜨립니다.
+% 아래 코드는 \@xfloat을 표준 LaTeX 정의로 강제 복원합니다.
+% =====================================================================
+\makeatletter
+\def\@xfloat#1[#2]{%
+  \@nodocument
+  \def\@captype{#1}%
+  \def\@fps{#2}%
+  \@onelevel@sanitize\@fps
+  \def\reserved@b{!}%
+  \ifx\@fps\reserved@b
+      \@fpsadddefault
+  \else
+      \ifx\@fps\@empty \@fpsadddefault \fi
+  \fi
+  \ifhmode
+    \@bsphack
+    \@floatpenalty -\@Mii
+  \else
+    \@floatpenalty-\@Miii
+  \fi
+  \ifinner
+    \@parmoderr\@floatpenalty\z@
+  \else
+    \@next\@currbox\@freelist
+        {\@tempcnta\sixt@@n
+         \expandafter\@tfor \expandafter \reserved@a
+                \expandafter :\expandafter =\@fps
+            \do{\if \reserved@a h\advance\@tempcnta \@ne\fi
+                \if \reserved@a t\advance\@tempcnta \tw@\fi
+                \if \reserved@a b\advance\@tempcnta 4\relax\fi
+                \if \reserved@a p\advance\@tempcnta 8\relax\fi
+                \if \reserved@a !\@tempswatrue \fi
+               }%
+         \@tempcntb\csname ftype@#1\endcsname
+         \multiply\@tempcntb\@xxxii
+         \advance\@tempcnta\@tempcntb
+         \global\count\@currbox\@tempcnta}%
+        \@fltovf
+  \fi
+  \global\setbox\@currbox
+        \color@vbox
+        \normalcolor
+        \vbox\bgroup
+        \hsize\columnwidth
+        \@parboxrestore
+        \@floatboxreset
+}
+\makeatother
+% =====================================================================
+
+\usepackage{epic,eepic,epsfig}
+\usepackage{subfigure}
+\usepackage{fancyhdr,indentfirst}
+\usepackage{amsfonts,amsmath,amssymb}
+\usepackage{multirow,rotating}     % [FIX] picins 제거 — figure 환경과 충돌
+\usepackage{kotex}
+\usepackage{mathrsfs}
+\usepackage{lscape}
+\usepackage{adjustbox}
+\usepackage{xcolor}
+% \usepackage{natbib}              % [FIX] natbib 제거 — ieeetr 스타일과 충돌
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage[toc,page]{appendix}
+\usepackage{float}
+%\usepackage{caption}
+%\usepackage{soul} % to use \ul command (\underline 쓰면 줄이 안바뀜)
+\setlength{\belowcaptionskip}{10pt}
+%\documentclass[a4paper,11pt]{article}
+\usepackage{algorithm} 
+\usepackage{algpseudocode} 
+
+\DeclareMathOperator*{\argminB}{argmin}   % Jan Hlavacek
+% \usepackage{makeidx} % 색인을 위한 패키지
+% \makeindex % 색인을 위한 명령어
+% \usepackage{subcaption} % for subfigure caption
+%\captionsetup[table]{skip=10pt} % To give margin between cation and table
+\usepackage[shortlabels]{enumitem} % for enumerate style
+%\usepackage{hfont,newlfont}
+\usepackage{makecell} % thick table border
+\usepackage{secdot} % 섹션 번호 끝에 . 넣기 위해 (ex_2.1->2.1.)
+\sectiondot{subsection} % 서브섹션 번호 끝에 .
+% --- 210629 추가: 챕터, 섹션, 피규어 등의 번호 표시 방식 설정 (숙명여대 규정)  ------------
+\renewcommand{\thechapter}{\textrm{\Roman{chapter}}} %Enumerate chapter as Roman number
+\renewcommand{\thesection}{\arabic{chapter}.\arabic{section}} %Enumerate section as arabic number
+\renewcommand{\thefigure}{\arabic{chapter}.\arabic{figure}} 	% figure 번호를 아라비아 숫자로 표기
+\renewcommand{\thetable}{\arabic{chapter}.\arabic{table}}	% table 번호를 아라비아 숫자로 표기	
+\renewcommand{\theequation}{\arabic{chapter}.\arabic{equation}}
+% ------------------------------
+
+%\usepackage{subfigure,epsfig}
+%\usepackage{hfont}
+%\usepackage[centertags]{amsmath}
+%\usepackage{amsfonts}
+%\usepackage{amssymb}
+%\usepackage{fancyhdr}
+%\usepackage{amsthm}
+%\usepackage{multirow,rotating,picins}
+%\usepackage{newlfont}
+%\usepackage{xthesis} %DAL Thesis Style
+%\usepackage{xtocinc} %Include Table of Contents as the first entry in TOC
+%                     Faculty of Grad Studies insists on this!?
+%\usepackage[inactive]{srcltx} %SRC Specials for DVI search
+
+% -------------- 이전 템플릿 여백 ------------ %
+% \topmargin=1.45cm%
+% \oddsidemargin=1.0cm%
+% \evensidemargin=\oddsidemargin%
+% \textwidth=14.45cm%
+% %\textwidth=15.1cm
+% \textheight=20.7cm%
+% \footskip=0.8cm%
+% \headheight=0mm%
+% \headsep=12mm%
+% \topskip=0mm%
+% \setlength{\parindent}{1.5em}%
+% -----------------------------------------------
+% --------210629 수정 (숙명여대 최종 제본용)----- %
+\setlength{\paperwidth}  {210mm}
+\setlength{\paperheight} {297mm}
+%% 편집용지 설정
+\usepackage[paperheight=297mm,paperwidth=210mm,
+			left=40mm,right=40mm,top=55mm,bottom=57mm]{geometry}
+\setlength{\headheight}{20mm}
+\setlength{\headsep}{12mm}
+\linespread{1.6}
+\setlength{\parindent}{2.0em}%
+% -----------------------------------------------
+\setlength{\arraycolsep}{0.25em}%
+\renewcommand{\baselinestretch}{1.55}%
+%\renewcommand{\baselinestretch}{1.425}
+\renewcommand{\figurename}{\small Fig.}%
+\renewcommand{\tablename}{\small \scshape Table}%
+\pagestyle{fancy}%
+\lhead{}%
+\cfoot{}%
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator*{\minmax}{minmax}
+
+%% ENVIRONEMTS
+\newtheorem{exam}{\bf Example}[chapter]
+\newtheorem{thm}{\bf Theorem}[chapter]
+\newtheorem{lem}{\bf Lemma}[chapter]
+\newtheorem{col}{\bf Corollary}[chapter]
+\newtheorem{remark}{\bf Remark}[chapter]
+\newtheorem{prop}{\bf Proposition}[chapter]
+\newtheorem{defn}{\bf Definition}[chapter]
+\newtheorem{ass}{\bf A}[chapter]
+\newtheorem{prob}{\bf Problem}[chapter]
+\def\beq{\begin{eqnarray*}}
+\def\eeq{\end{eqnarray*}}
+\def\QED{\mbox{\rule[0pt]{1.5ex}{1.5ex}}}
+\def\pf{\noindent\hspace{2em}{\it Proof: }}
+\def\endpf{\hspace*{\fill}~\QED\par\endtrivlist\unskip}
+\def\endex{\hspace*{\fill}~$\Box$\par\endtrivlist\unskip}
+\def\goodgap{%
+     \hspace{\subfigtopskip}%
+     \hspace{\subfigbottomskip}}
+%\renewcommand{\multirowsetup}{\centering}
+\renewcommand{\textfraction}{0.0}   % Min. fraction of the page that can be occupied by text(0~1, default: 0.2)
+\renewcommand{\topfraction}{1.0}    % Max. fraction of the page that can be occupied by floats at the top(0~1, default: 0.7)
+\renewcommand{\bottomfraction}{1.0}    % Max. fraction of the page that can be occupied by floats at the bottom(0~1, default: 0.7)
+\newcommand{\bea}{\begin{eqnarray}}
+\newcommand{\eea}{\end{eqnarray}}
+\newcommand{\be}{\begin{equation}}
+\newcommand{\ee}{\end{equation}}
+
+\begin{document}
+ \input 1_BeforeChapters/thanks.tex  % 감사의 글
+
+\pagestyle{plain}
+%\lhead{} \chead{} \rhead{} \cfoot{\thepage}}
+\renewcommand{\thepage}{\roman{page}}
+
+\pagestyle{fancy}%
+\lhead{} \rhead{}
+\cfoot{\thepage}%
+
+\setcounter{page}{0}
+\addcontentsline{toc}{chapter}{Contents}%
+\def\chapname{\small \textsf{\textbf{Contents\hspace*{1.0em}\thepage}}}%
+\rhead[\chapname]{\chapname}%
+\tableofcontents%
+\newpage
+
+\addcontentsline{toc}{chapter}{List of Tables}%
+\def\chapname{\small \textsf{\textbf{List of Tables\hspace*{1.0em}\thepage}}}%
+\rhead[\chapname]{\chapname}%
+\listoftables%
+\newpage
+
+\addcontentsline{toc}{chapter}{List of Figures}%
+\def\chapname{\small \textsf{\textbf{List of Figures\hspace*{1.0em}\thepage}}}%
+\rhead[\chapname]{\chapname}%
+\listoffigures%
+\newpage
+
+\addcontentsline{toc}{chapter}{List of Abbreviations}%
+\def\chapname{\small \textsf{\textbf{List of Abbreviations\hspace*{1.0em}\thepage}}}%
+\rhead[\chapname]{\chapname}%
+\input 1_BeforeChapters/abbreviation.tex
+\newpage
+
+\pagestyle{plain}
+\input 1_BeforeChapters/abstract.tex
+
+\setcounter{page}{1}%
+\pagenumbering{arabic}%
+% --------------------------------------------------------------------------------------------------------
+% \pagestyle{plain} %- case 1
+% \pagestyle{headings} %- case 2
+
+ %---- case 3 : 210629 추가----%
+\fancypagestyle{newpagestyle}{ %- case 3 % 210629 추가
+    \fancyhf{} % 서식 초기화
+    \renewcommand{\headrulewidth}{0pt} % Header 밑에 줄 없애기 위한 설정
+    \fancyhead[L]{\textsl{\rightmark}} % Header 왼쪽 부분에 section 번호와 이름 나오도록 설정
+    \fancyfoot[C]{\thepage} % Footer의 가운데에 page number가 나오도록 설정
+}
+\pagestyle{newpagestyle}
+%-----------------------------%
+
+\input 2_Chapters/Ch1_Intro.tex
+\input 2_Chapters/Ch2_Prelim.tex
+\input 2_Chapters/Ch3_Propose.tex
+\input 2_Chapters/Ch4_Exp.tex
+\input 2_Chapters/Ch5_Conclusion.tex
+\bibliographystyle{ieeetr}
+\bibliography{reference}
+
+%%% \input 3_AfterChapters/appendix.tex % 부록
+%%% \input 3_AfterChapters/index.tex % 색인
+\input 3_AfterChapters/abstract_korean.tex
+\input 3_AfterChapters/curriculum_vitae.tex
+\input 3_AfterChapters/research_publication.tex
+
+% ------------------------------------------------------------------------
+% \INPUT{ref}   % For Gather Purpose Only
+% \INPUT{Thesis.bbl} % For Gather Purpose Only
+% \setlinespacing{1.44}
+% \bibliographystyle{amsplain}
+% \bibliography{ref}
+\end{document}
+% ------------------------------------------------------------------------

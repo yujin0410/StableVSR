@@ -1,0 +1,96 @@
+\chapter{Introduction}{}{}
+\label{CH:INTRO}%
+
+%===================== Motivation ===================%
+\section{Motivation}
+% Motivation for diffusion-based VSR with frequency-domain robustness
+
+With the recent advancement of high-speed communication networks and the proliferation of multimedia platforms, the demand for high-resolution (HR) video content has increased exponentially. Consequently, Video Super-Resolution (VSR) technology---which restores degraded high-frequency details from low-resolution inputs by leveraging both intra-frame spatial information and inter-frame temporal information---has become ncreasingly significant \cite{wang2020survey, liu2022video}.
+
+
+Early deep learning-based VSR studies focused on frame alignment techniques to effectively aggregate temporal information across adjacent frames. Representative approaches either explicitly estimated optical flow to warp frames \cite{xue2019toflow} or implicitly aligned spatiotemporal features using deformable convolutions and Recurrent Neural Network (RNN) architectures \cite{wang2019edvr, chan2021basicvsr}. However, these traditional 
+approaches induce severe artifacts when alignment errors occur in environments with complex motions or severe degradation. Furthermore, because they primarily rely on pixel-wise loss functions such as Mean Squared Error (MSE), their results are excessively over-smoothed, limiting perceptual realism. While Generative Adversarial Network (GAN)-based methodologies partially mitigated this over-smoothing problem, they still suffered from 
+unstable training dynamics and the generation of unnatural visual artifacts \cite{ledig2017srgan, wang2018esrgan}. Recently, the introduction of diffusion models has enabled the restoration of extremely realistic and intricate high-frequency details that surpass existing generative approaches \cite{ho2020ddpm, saharia2022sr3}.
+
+
+However, directly applying pre-trained image diffusion models to video super-resolution presents a critical challenge. Because the denoising process of each frame is performed independently based on the model's generative prior, the restored high-frequency details vary inconsistently due to stochastic denoising. This 
+lack of temporal consistency critically degrades the overall video quality \cite{chu2020temporal}.
+
+
+Recent studies have attempted two main approaches to resolve this temporal inconsistency. The first is to utilize video-specific generative models that apply 3D convolutions or spatiotemporal attention mechanisms \cite{blattmann2023svd, zhou2024upscaleavideo}. However, these models require billions of parameters and massive computational costs, imposing a significant constraint on real-world deployment. The second approach is to add temporal attention layers to existing image diffusion models followed by fine-tuning the entire network. However, updating the weights of the entire generative model incurs prohibitive computational costs and risks degrading the rich generative prior of pre-trained models through catastrophic forgetting \cite{zhang2023controlnet}. To address this, parameter-efficient adaptation methods \cite{hu2021lora} have been actively explored.
+
+
+Fundamentally, the temporal flickering phenomenon in diffusion-based VSR arises because the model generates 
+high-frequency components inconsistently along the temporal axis. Therefore, instead of forcing consistency at the pixel level through heavy spatiotemporal operations or fine-tuning the entire model, conditioning the generation on shift-stable frequency-domain priors offers a more principled alternative. The Dual-Tree Complex 
+Wavelet Transform (DT-CWT) \cite{selesnick2005dtcwt} provides exactly such a representation: its magnitudes are approximately shift-invariant under sub-pixel translations, and its multi-scale decomposition naturally separates structural information from textural details---a separation that aligns with the hierarchical 
+processing of the diffusion U-Net.
+
+
+Motivated by this observation, this study proposes \emph{Wavelet-Conditioned Dual-SFT}, a frequency-domain adaptation framework that injects DT-CWT-derived priors into a frozen pre-trained diffusion U-Net through asymmetric encoder-decoder injection. The proposed framework decomposes each low-resolution frame into four DT-CWT scales and partitions them into high-frequency and low-frequency bands according to their 
+semantic roles: high-frequency bands modulate the U-Net decoder to guide textural detail synthesis, while low-frequency bands modulate the U-Net encoder to provide structural guidance during feature extraction. Each scale is processed by a lightweight PerLevelProcessor with decoupled magnitude-phase branches, where phase is encoded via a trigonometric representation that avoids the $2\pi$-wraparound discontinuity. The resulting Frequency Conditioning Encoder remains lightweight (6.22M parameters) and is trained from identity-preserving initialization, ensuring that the generative prior of the pre-trained diffusion model is preserved throughout adaptation. This frequency-domain approach offers a principled solution to temporal inconsistency without resorting to heavy spatiotemporal operations or full-network fine-tuning.
+
+%===================== Related Works ===================%
+\section{Related Works}
+
+This section provides a comprehensive review of the foundational research and recent advancements relevant to the proposed framework, organized into three main areas. First, it examines the evolution of Video Super-Resolution (VSR) techniques, focusing on the transition from handling simple degradations to 
+tackling complex real-world scenarios. Second, it discusses the development of diffusion-based generative models for VSR, highlighting the recent shift toward parameter-efficient adaptation strategies. Finally, it explores frequency-domain analysis in deep learning, specifically contrasting standard wavelet transforms with the mathematically robust Dual-Tree Complex Wavelet Transform (DT-CWT). By synthesizing these existing methodologies, this section establishes the necessity of the proposed wavelet-conditioned diffusion approach.
+
+
+%-------------- Subsection ---------------%
+\subsection{Video Super-Resolution and Real-World VSR} Video Super-Resolution (VSR) aims to reconstruct high-resolution (HR) frames by effectively aggregating temporal information from multiple low-resolution (LR) frames. Traditional deep learning approaches primarily focused on predefined, simple degradations. For instance, BasicVSR \cite{chan2021basicvsr} established a strong baseline by utilizing a bidirectional recurrent network to propagate spatiotemporal information effectively. To further enhance temporal aggregation, implicit alignment methods were introduced. EDVR \cite{wang2019edvr} proposed a PCD alignment 
+module based on Deformable Convolutions (DCN), while BasicVSR++ \cite{chan2022basicvsrplusplus} improved feature propagation through second-order grid structures, balancing alignment accuracy and computational cost.
+
+However, in practical scenarios, videos suffer from unknown and complex degradations such as sensor noise and compression artifacts. To address this, the paradigm shifted toward Real-World VSR. Models like RealBasicVSR \cite{chan2022realbasicvsr} introduced image cleaning and robust training strategies to handle diverse real-world degradations. While these CNN- and GAN-based Real-World VSR models significantly improved robustness, they still struggled to synthesize highly realistic and intricate high-frequency textures, paving the way for the adoption of diffusion models.
+
+
+\subsection{Diffusion Models for Video Super-Resolution}
+Diffusion probabilistic models have recently redefined the state-of-the-art in perceptual Real-World VSR. Several recent studies have successfully adapted large-scale image diffusion priors to the video domain. MGLD \cite{yang2024mgld} and Upscale-A-Video \cite{zhou2024upscaleavideo} proposed text-prompted and latent-based diffusion frameworks to enhance video temporal consistency. Concurrently, StableVSR \cite{rota2024stablevsr} achieved impressive perceptual quality by integrating spatiotemporal attention mechanisms into the pre-trained Stable Diffusion. To further address the massive computational overhead of these diffusion VSR models, more 
+recent frameworks such as DOVE \cite{dove2025} and STAR \cite{xie2025star} refined the temporal alignment and attention mechanisms to achieve better efficiency and cross-frame stability.
+
+Most closely related to the proposed work is DGAF-VSR \cite{xu2026dgaf}, presented at CVPR 2026, which proposes a parameter-efficient adaptation strategy for diffusion-based VSR through an Optical Guided Warping Module (OGWM) and a Featurewise Temporal Condition Module (FTCM). DGAF-VSR effectively demonstrates that feature-level conditioning can deliver dense temporal guidance without full-network fine-tuning, achieving notable improvements in perceptual quality and temporal consistency. However, its reliance on optical flow-based warping (OGWM) inherits the fragility of flow estimation under complex motions, severe occlusions, or 
+extreme degradations, where flow estimation often fails to provide reliable correspondence.
+
+The proposed framework shares the parameter-efficient adaptation philosophy of DGAF-VSR but shifts the conditioning paradigm from the spatial feature level to the frequency domain. Rather than warping features along estimated motion trajectories, the proposed Wavelet-Conditioned Dual-SFT exploits the near 
+shift-invariance of DT-CWT to provide stable frequency conditioning that is robust to sub-pixel misalignments by construction. By decomposing each LR frame into multi-scale complex wavelet coefficients and modulating the U-Net through asymmetric encoder-decoder injection, the proposed approach achieves temporal consistency without requiring explicit motion estimation or modifying the generative prior of the pre-trained diffusion model.
+
+
+\subsection{Frequency-Domain Analysis and Wavelet Transforms}
+Frequency-domain representations, particularly wavelet transforms, have been extensively utilized in image restoration to isolate high-frequency details from low-frequency structural 
+information. In the context of video restoration, FCVSR \cite{zhu2025fcvsr} successfully demonstrated that explicitly separating frequency components enhances detail restoration in compressed video super-resolution. Furthermore, recent studies such as DFVSR \cite{dong2023dfvsr} and FTVSR \cite{zhong2022ftvsr} 
+have highlighted the benefits of frequency-domain temporal alignment to bypass the limitations of purely spatial convolutions.
+
+In diffusion-based models, the Discrete Wavelet Transform (DWT) has been utilized to replace standard spatial pooling operations \cite{liu2018mwcnn} or to formulate wavelet-domain losses for controlling generative artifacts \cite{korkmaz2024training}. However, applying standard DWT to video domains presents a fundamental limitation: shift-variance. Because DWT involves critical (decimating) downsampling, even minute sub-pixel 
+motions between adjacent video frames cause the wavelet coefficients to fluctuate drastically. This shift-variance introduces aliasing artifacts and exacerbates temporal flickering in generative VSR tasks.
+
+To overcome these limitations, the proposed framework employs the Dual-Tree Complex Wavelet Transform (DT-CWT) \cite{selesnick2005dtcwt}, which utilizes two parallel DWT trees to construct analytic signals. This sophisticated architecture guarantees near shift-invariance and provides rich directional selectivity across six distinct orientations per scale. The resulting complex coefficients admit a magnitude-phase decomposition with complementary semantic roles: magnitudes provide shift-stable energy information suitable as frequency priors, while phases encode fine-grained spatial localization. The proposed Wavelet-Conditioned Dual-SFT exploits this decomposition through dedicated magnitude and phase processing branches, providing a principled solution that addresses the shift-variance limitation of conventional DWT-based approaches.
+
+In summary, the proposed framework directly addresses the central limitations of existing VSR approaches: the over-smoothing of implicit CNN-based methods, the parameter overhead of full-network diffusion adaptation, and the shift-variance of standard wavelet transforms. The next chapter formalizes the theoretical foundations required to develop this framework.
+
+
+%===================== Contributions ======================%
+\section{Contributions}
+The main contributions of this study are presented as follows:
+\begin{itemize}
+    \item We propose Wavelet-Conditioned Dual-SFT, a frequency-domain adaptation framework that injects 
+    DT-CWT-derived priors into a frozen pre-trained diffusion U-Net through asymmetric encoder-decoder injection. High-frequency bands modulate the decoder for textural detail synthesis, while low-frequency bands modulate the encoder for structural guidance.
+    
+    \item We design a decoupled magnitude-phase processing scheme that handles each band through dedicated branches, with phase encoded via a trigonometric representation to avoid the $2\pi$-wraparound discontinuity. The resulting Frequency Conditioning Encoder is lightweight (6.22M parameters) and trained from identity-preserving initialization to ensure stable adaptation.
+    
+    \item Extensive experiments on REDS4, Vid4, UDM10, and SPMCS demonstrate a 63\% reduction in temporal 
+    inconsistency (tLPIPS) compared to StableVSR (41.11 to 15.25 on REDS4), with consistent improvements across all benchmarks.
+\end{itemize}
+
+
+%===================== Outline =======================%
+\section{Outline}
+The remainder of the thesis is organized into four chapters. 
+The following summary provides an overview of each chapter.
+
+\paragraph*{Chapter 2:} This chapter establishes the theoretical foundation of the proposed framework. It first reviews diffusion probabilistic models and their extension to the latent space. Subsequently, it analyzes the limitations of the standard Discrete Wavelet Transform (DWT), motivating the adoption of the Dual-Tree Complex Wavelet Transform (DT-CWT) through its near shift-invariance and rich directional selectivity. Finally, it introduces the Spatial Feature 
+Transform (SFT) as the underlying mechanism for efficient feature modulation.
+
+\paragraph*{Chapter 3:} This chapter provides a detailed description of the proposed Wavelet-Conditioned Dual-SFT framework. It first formulates the DT-CWT-based frequency decomposition and the band partitioning into high-frequency and low-frequency groups. It then introduces the lightweight Frequency Conditioning Encoder, which processes each scale through a PerLevelProcessor with decoupled magnitude-phase branches. Finally, it describes the asymmetric encoder-decoder dual injection scheme, the identity-preserving initialization strategy, and the band-decoupled wavelet loss that complements the standard diffusion objective.
+
+\paragraph*{Chapter 4:} This chapter reports the experimental results of the proposed framework. It first specifies the experimental setup, including the REDS, Vid4, UDM10, and SPMCS benchmarks, evaluation metrics, and implementation details. Quantitative and qualitative comparisons against state-of-the-art methods are then presented, followed by ablation studies that analyze the contribution of each design component.
+
+\paragraph*{Chapter 5:} This chapter concludes the thesis with a summary of the proposed method, a discussion of its limitations, and an outline of future research directions.

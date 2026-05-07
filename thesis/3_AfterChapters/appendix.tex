@@ -1,0 +1,13 @@
+\begin{appendices}
+\label{appendix:kl}
+\chapter{Kullback-Leibler divergence}
+\\\\To measure the difference between two probability distributions over the same variable $x$, a measure, called the Kullback-Leibler divergence (KL divergence) has been widely used in the data mining literature. The concept was originated in probability theory and information theory. The KL divergence is to related to relative entropy, information divergence and information for discrimination. It is non-symmetric measure of the difference between two probability distribution $p(x)$ and $q(x)$. The KL divergence of $q(x)$ from $p(x)$, denoted $KL(p(x)||q(x))$ is a measure of the information lost when $q(x)$ is used to approximate $p(x)$.
+$KL(p(x)||q(x))$ is defined as follow:
+
+\begin{equation}
+    KL(p(x)||q(x)) = \sum_{x\in X}p(x)\ln\frac{p(x)}{q(x)},
+\end{equation}
+where $p(x)$ and $q(x)$ are two probability distributions of a discrete random variable $x$. Both $p(x)$ and $q(x)$ sum up to 1, and $p(x) > 0$ and $q(x) > 0$ for any $x \in X$.
+
+Although the KL divergence measure the "distance'' between two distributions, it is not a distance measure. This is because that the KL divergence is not a metric measure. It is not symmetric: $KL(p(x)||q(x))\neq KL(q(x)||p(x))$. It is a non-negative measure: $KL(p(x)||q(x)) \geq 0$ and $KL(p(x)||q(x))=0$ if only if $p(x) = q(x)$.
+\end{appendices}

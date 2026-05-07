@@ -1,0 +1,16 @@
+\chapter{Conclusion}{~}{~}
+\label{CH:CONC}
+
+ In this thesis, we proposed Wavelet-Conditioned Band-Decoupled Spatial Feature Transform (Band-Decoupled SFT), a frequency-domain adaptation framework that injects DT-CWT-derived priors into a frozen pre-trained diffusion U-Net. To effectively address temporal flickering in diffusion-based VSR, we leveraged the near shift-invariance of DT-CWT magnitudes, which remain approximately stable under sub-pixel translations. The complex wavelet coefficients of each low-resolution frame are decomposed into four scales and partitioned into high-frequency and low-frequency bands according to their semantic roles. Therefore, two distinct frequency priors are constructed and routed to semantically appropriate U-Net stages by the designed framework.
+ 
+ To maximize the structural and textural guidance, we designed an asymmetric encoder-decoder injection scheme. High-frequency bands modulate the U-Net decoder for textural detail synthesis, while low-frequency bands modulate the encoder for structural feature extraction. This asymmetric injection demonstrated the significance of aligning frequency components with the hierarchical processing of U-Net while preserving the generative prior. Furthermore, processing magnitude and phase through decoupled branches with trigonometric phase encoding enhanced the stability of frequency conditioning.
+ 
+
+ 
+From the experiments, we have proved the proposed asymmetric injection and decoupled magnitude-phase processing can achieve strong temporal consistency. The proposed method achieves a 63\% reduction in tLPIPS (from 41.11 to 15.25) on REDS4 compared to the StableVSR baseline. Moreover, the Frequency Conditioning Encoder requires only 6.22M parameters, approximately 3\% of the ControlNet backbone, while consistent improvements are observed across the Vid4, UDM10, and SPMCS benchmarks when compared to StableVSR \cite{rota2024stablevsr}. 
+
+As future work, a method to extend the frequency-domain conditioning paradigm to a fully flow-free pipeline by replacing the optical flow-based warping in the ControlNet branch is needed. Furthermore, various research on latent-space wavelet analysis and adaptive band partitioning is needed.
+
+
+    
+%%%

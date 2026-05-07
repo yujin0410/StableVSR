@@ -1,0 +1,34 @@
+\newpage
+\addcontentsline{toc}{chapter}{Abstract} % if {Bi---} is eliminated, it generates error
+
+\begin{center} {\Large{ABSTRACT}}
+\vspace*{1cm}\\
+\Large   Wavelet-Conditioned Band-Decoupled Spatial Feature Transform 
+       for Diffusion-Based Video Super-Resolution
+\vspace*{1cm}\\
+\normalsize
+Yu-Jin Cho\\Department of IT Engineering\\The Graduate School\\Sookmyung Women's University
+\vspace*{1cm}
+\end{center}
+
+% \paragraph*{Abstract}
+
+% 필수 내용: Intro+문제+내방법(모듈별디테일)+결과(문단으로 디테일하게)
+
+
+Recently, diffusion models have achieved outstanding perceptual quality in Video Super-Resolution (VSR), but applying image-based diffusion models to video sequences induces severe texture flickering due to independent stochastic generation across frames, while 3D spatiotemporal architectures and full temporal fine-tuning incur prohibitive computational costs and risk degrading the rich generative prior of pre-trained models through catastrophic forgetting. To overcome these limitations, this thesis proposes Wavelet-Conditioned Asymmetric Spatial Feature Transform (Asymmetric SFT), a frequency-domain adaptation framework that injects Dual-Tree Complex Wavelet Transform (DT-CWT)-derived priors into a frozen pre-trained diffusion U-Net, exploiting the shift-stable magnitudes of DT-CWT that remain approximately invariant under sub-pixel translations as a principled basis for temporally consistent generation. The proposed framework decomposes each low-resolution frame into four DT-CWT scales and partitions them into high-frequency and low-frequency bands according to their semantic roles: high-frequency bands modulate the U-Net decoder to guide textural detail synthesis, while low-frequency bands modulate the encoder to provide structural guidance during feature extraction, and each scale is processed by a lightweight PerLevelProcessor with decoupled magnitude and phase branches, where phase is encoded through a trigonometric (sin/cos) representation that avoids the $2\pi$-wraparound discontinuity. The resulting Frequency Conditioning Encoder remains lightweight (6.22M parameters, approximately 3\% of the ControlNet backbone) and is trained from identity-preserving initialization to ensure that the generative prior is strictly preserved during adaptation, complemented by a band-decoupled wavelet loss that enforces magnitude consistency on high-frequency bands and joint magnitude-phase consistency on low-frequency bands. Extensive experiments on the REDS4, Vid4, UDM10, and SPMCS benchmarks demonstrate that the proposed method achieves a 63\% reduction in temporal inconsistency (tLPIPS, from 41.11 to 15.25 on REDS4) compared to the StableVSR baseline, with consistent improvements across all four benchmarks, presenting a novel frequency-domain adaptation paradigm that achieves strong temporal consistency and parameter efficiency without compromising the generative prior of the pre-trained diffusion model.
+
+
+%The overall architecture is designed with two module: feature embedding and similarity learning. The face, lip, and eyes support and query set are fed into the feature embedding module and generate mapping features. Then, the combined features are fed into the similarity module, which predicts categories by calculating relation scores. To train support and query set consistently, we set every episode to have the same amount of samples.
+
+
+\vfill
+\begin{flushleft}
+\begin{minipage}[t][22mm][b]{0.8\textwidth}
+\noindent\makebox[\linewidth]{\rule{\linewidth}{1pt}}
+{\bfseries keywords}: Video Super-Resolution, Diffusion Model, Dual-Tree Complex Wavelet Transform (DT-CWT), Spatial Feature Transform (SFT), Asymmetric Injection, Frequency-Domain Conditioning, Temporal Consistency
+
+{\bfseries student number}: 2431101\\
+\end{minipage}
+\end{flushleft}
+\clearpage
