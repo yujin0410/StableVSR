@@ -4,20 +4,25 @@
 # DGAF-VSR writes to: <out_path>/<seq.parent.name>/<seq.name>/<frame>.png
 # e.g. results/REDS4/dgaf_reds4_s50/x4/000/0000000.png
 #
-# Usage:
-#   bash eval_dgaf_vsr.sh <DGAF_OUT_PATH> <DATASET>
-# Example:
-#   bash eval_dgaf_vsr.sh /mnt/HDD_raid1/yjcho/DGAF-VSR/results/REDS4/dgaf_reds4_s50 reds4
-#   bash eval_dgaf_vsr.sh /mnt/HDD_raid1/yjcho/DGAF-VSR/results/Vid4/dgaf_vid4_s50  vid4
+# Usage (with default paths):
+#   bash eval_dgaf_vsr.sh reds4
+#   bash eval_dgaf_vsr.sh vid4
+# Or override:
+#   bash eval_dgaf_vsr.sh reds4 /custom/path
 set -e
 
-SRC="${1:?usage: $0 <dgaf_out_path> <dataset>}"
-DATASET="${2:?usage: $0 <dgaf_out_path> <dataset>}"
+DATASET="${1:?usage: $0 <dataset> [dgaf_out_path]}"
+DEFAULT_REDS="/mnt/HDD_raid1/yjcho/Comparison/DGAF-VSR/REDS"
+DEFAULT_VID4="/mnt/HDD_raid1/yjcho/Comparison/DGAF-VSR/Vid4"
+case "$DATASET" in
+  reds4) SRC="${2:-$DEFAULT_REDS}" ;;
+  vid4)  SRC="${2:-$DEFAULT_VID4}" ;;
+  *) echo "unknown dataset: $DATASET (use reds4 or vid4)"; exit 1 ;;
+esac
 
 case "$DATASET" in
   reds4) GT_PATH="/mnt/HDD_raid1/yjcho/data/REDS/test/gt" ;;
   vid4)  GT_PATH="/mnt/HDD_raid1/yjcho/data/Vid4/GT"      ;;
-  *) echo "unknown dataset: $DATASET"; exit 1 ;;
 esac
 
 # Pick the inner level produced by DGAF-VSR (e.g. "x4" / "Bicubic4xLR").
