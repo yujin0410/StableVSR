@@ -368,9 +368,265 @@ def make_mag_phase_pipeline():
     print(f"  wrote {OUT / 'mag_phase_pipe.png'}")
 
 
+def make_flickering_demo():
+    """Three-frame illustration of stochastic per-frame texture flickering."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(7, 3.6), dpi=200)
+    ax.set_xlim(0, 7)
+    ax.set_ylim(0, 3.6)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    # Top row — inconsistent textures (StableVSR-style flicker)
+    y_top = 2.1
+    ax.text(0.05, y_top + 0.75, "Per-frame independent\nstochastic denoising",
+            fontsize=9, color=LOW, fontweight="bold", va="top")
+    for k, x in enumerate([1.7, 3.2, 4.7]):
+        # Random texture patch (different seed per frame)
+        np.random.seed(k * 7 + 1)
+        patch = np.random.randn(40, 40) * 0.5
+        patch = (patch - patch.min()) / (patch.max() - patch.min())
+        ax.imshow(patch, extent=[x, x + 1.3, y_top, y_top + 1.3],
+                  cmap="gray", aspect="auto", zorder=1)
+        ax.add_patch(FancyBboxPatch(
+            (x, y_top), 1.3, 1.3,
+            boxstyle="round,pad=0.0,rounding_size=0.04",
+            ec=LOW, fc="none", lw=1.5))
+        ax.text(x + 0.65, y_top - 0.15, f"frame  t{['-1','','+1'][k]}",
+                ha="center", fontsize=8.5, color=GRAY)
+    # Red wavy "flicker" arrows between frames
+    for k in range(2):
+        x0 = 1.7 + k * 1.5 + 1.3
+        ax.plot([x0 + 0.04, x0 + 0.16],
+                [y_top + 0.65, y_top + 0.65], color=LOW, lw=1.5)
+        ax.annotate("", xy=(x0 + 0.2, y_top + 0.65),
+                    xytext=(x0 + 0.04, y_top + 0.65),
+                    arrowprops=dict(arrowstyle="-|>", color=LOW, lw=1.5))
+    ax.text(6.10, y_top + 0.65,
+            "≠   ≠",
+            fontsize=22, color=LOW, fontweight="bold", va="center")
+    ax.text(6.10, y_top + 0.18,
+            "flicker",
+            fontsize=9, color=LOW, fontweight="bold", style="italic",
+            va="center")
+
+    # Bottom row — consistent textures (after our method)
+    y_bot = 0.25
+    ax.text(0.05, y_bot + 0.75, "Frequency-conditioned\n(WC-BD-SFT)",
+            fontsize=9, color=HIGH, fontweight="bold", va="top")
+    # Same texture across all 3 frames
+    np.random.seed(99)
+    patch = np.random.randn(40, 40) * 0.5
+    patch = (patch - patch.min()) / (patch.max() - patch.min())
+    for k, x in enumerate([1.7, 3.2, 4.7]):
+        ax.imshow(patch, extent=[x, x + 1.3, y_bot, y_bot + 1.3],
+                  cmap="gray", aspect="auto", zorder=1)
+        ax.add_patch(FancyBboxPatch(
+            (x, y_bot), 1.3, 1.3,
+            boxstyle="round,pad=0.0,rounding_size=0.04",
+            ec=HIGH, fc="none", lw=1.5))
+        ax.text(x + 0.65, y_bot - 0.15, f"frame  t{['-1','','+1'][k]}",
+                ha="center", fontsize=8.5, color=GRAY)
+    ax.text(6.10, y_bot + 0.65,
+            "=   =",
+            fontsize=22, color=HIGH, fontweight="bold", va="center")
+    ax.text(6.10, y_bot + 0.18,
+            "stable",
+            fontsize=9, color=HIGH, fontweight="bold", style="italic",
+            va="center")
+
+    plt.tight_layout()
+    plt.savefig(OUT / "flickering_demo.png", bbox_inches="tight",
+                facecolor=WHITE)
+    plt.close()
+    print(f"  wrote {OUT / 'flickering_demo.png'}")
+
+
+def make_vsr_timeline():
+    """Horizontal timeline of VSR methods, color-coded by paradigm."""
+    fig, ax = plt.subplots(figsize=(13, 3.0), dpi=200)
+    ax.set_xlim(2017.5, 2026.5)
+    ax.set_ylim(0, 3.0)
+    ax.axis("off")
+
+    # Main axis line
+    ax.plot([2018, 2026.2], [1.3, 1.3], color=INK, lw=1.5)
+    for yr in range(2018, 2027):
+        ax.plot([yr, yr], [1.22, 1.38], color=INK, lw=1.0)
+        ax.text(yr, 0.95, str(yr), ha="center", fontsize=8.5, color=GRAY)
+
+    items = [
+        # (year, label, paradigm, y_offset, color)
+        (2018, "EDVR / DUF",          "CNN",       0.6, "#9C9CB0"),
+        (2019, "TOFlow / RBPN",       "CNN",       0.6, "#9C9CB0"),
+        (2021, "BasicVSR",            "CNN",       0.6, "#9C9CB0"),
+        (2022, "BasicVSR++ / VRT",    "CNN",       0.6, "#9C9CB0"),
+        (2018, "ESRGAN",              "GAN",       -0.55, "#F08C7A"),
+        (2021, "RealBasicVSR",        "GAN",       -0.55, "#F08C7A"),
+        (2024, "VideoGigaGAN",        "GAN",       -0.55, "#F08C7A"),
+        (2023, "MGLD-VSR",            "Diffusion", 0.6,   HIGH),
+        (2024, "StableVSR",           "Diffusion", 0.6,   HIGH),  # baseline
+        (2024, "Upscale-A-Video",     "Diffusion", -0.55, HIGH),
+        (2025, "DiffVSR / STAR",      "Diffusion", -0.55, HIGH),
+        (2025, "DLoRAL / UltraVSR\nSeedVR2",  "Diffusion", 0.6,   HIGH),
+        (2026, "DGAF-VSR",            "Diffusion", -0.55, HIGH),
+        (2026, "WC-BD-SFT (Ours)",    "Ours",      0.6,   PURPLE),
+    ]
+    # Plot
+    for yr, lbl, par, dy, col in items:
+        ty = 1.3 + dy
+        ax.plot([yr, yr], [1.3, ty], color=col, lw=0.9, alpha=0.7)
+        is_ours = (par == "Ours")
+        is_baseline = (lbl == "StableVSR")
+        weight = "bold" if (is_ours or is_baseline) else "normal"
+        fs = 9 if (is_ours or is_baseline) else 8.5
+        # Marker
+        ax.scatter([yr], [ty], s=55 if is_ours else 35,
+                   c=col, edgecolors="white", linewidths=1.2, zorder=5)
+        # Label box
+        va = "bottom" if dy > 0 else "top"
+        ax.text(yr, ty + (0.07 if dy > 0 else -0.07), lbl,
+                ha="center", va=va, fontsize=fs, color=col,
+                fontweight=weight)
+
+    # Legend
+    legend_items = [
+        ("CNN-based",  "#9C9CB0"),
+        ("GAN-based",  "#F08C7A"),
+        ("Diffusion",  HIGH),
+        ("Ours",       PURPLE),
+    ]
+    for k, (l, c) in enumerate(legend_items):
+        x0 = 2018.0 + k * 1.6
+        ax.scatter([x0], [2.75], s=45, c=c, edgecolors="white", linewidths=1)
+        ax.text(x0 + 0.12, 2.75, l, va="center", fontsize=9, color=INK)
+
+    plt.tight_layout()
+    plt.savefig(OUT / "vsr_timeline.png", bbox_inches="tight",
+                facecolor=WHITE)
+    plt.close()
+    print(f"  wrote {OUT / 'vsr_timeline.png'}")
+
+
+def make_diffusion_process():
+    """Schematic of forward / reverse latent diffusion process."""
+    fig, ax = plt.subplots(figsize=(13, 3.6), dpi=200)
+    ax.set_xlim(0, 13)
+    ax.set_ylim(0, 3.6)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    # 5 latent images, gradually noised
+    import numpy as np
+    n = 5
+    xs = [1.0 + k * 2.4 for k in range(n)]
+    y_top = 2.0
+    rng = np.random.default_rng(2)
+    # Base smooth pattern
+    base = np.outer(np.cos(np.linspace(0, 3, 32)),
+                    np.sin(np.linspace(0, 4, 32)))
+    base = (base - base.min()) / (base.max() - base.min())
+    for k, x in enumerate(xs):
+        alpha = k / (n - 1)
+        noise = rng.normal(size=(32, 32))
+        img = (1 - alpha) * base + alpha * (noise * 0.5 + 0.5)
+        img = np.clip(img, 0, 1)
+        ax.imshow(img, extent=[x, x + 1.0, y_top, y_top + 1.0],
+                  cmap="gray", aspect="auto", zorder=1)
+        ax.add_patch(FancyBboxPatch(
+            (x, y_top), 1.0, 1.0,
+            boxstyle="round,pad=0.0,rounding_size=0.04",
+            ec=INK, fc="none", lw=0.9))
+        ax.text(x + 0.5, y_top - 0.15, f"$x_{{{k * (1000 // (n - 1))}}}$",
+                ha="center", fontsize=10, color=INK)
+
+    # Forward arrow (noise added: left → right)
+    ax.add_patch(FancyArrowPatch(
+        (xs[0] + 0.5, y_top + 1.25), (xs[-1] + 0.5, y_top + 1.25),
+        arrowstyle="-|>", mutation_scale=14, color=LOW, lw=1.4))
+    ax.text((xs[0] + xs[-1]) / 2 + 0.5, y_top + 1.45,
+            "Forward · progressively add noise",
+            ha="center", fontsize=10, color=LOW, fontweight="bold")
+    ax.text((xs[0] + xs[-1]) / 2 + 0.5, y_top + 1.65,
+            "$q(x_t | x_{t-1}) = \\mathcal{N}(\\sqrt{1-\\beta_t}\\,x_{t-1},\\, \\beta_t I)$",
+            ha="center", fontsize=10, color=INK, style="italic")
+
+    # Reverse arrow (denoise: right → left)
+    ax.add_patch(FancyArrowPatch(
+        (xs[-1] + 0.5, y_top - 0.5), (xs[0] + 0.5, y_top - 0.5),
+        arrowstyle="-|>", mutation_scale=14, color=HIGH, lw=1.4))
+    ax.text((xs[0] + xs[-1]) / 2 + 0.5, y_top - 0.70,
+            "Reverse · U-Net denoising  ⇐  $\\epsilon_\\theta(x_t, t, c)$",
+            ha="center", fontsize=10, color=HIGH, fontweight="bold")
+    ax.text((xs[0] + xs[-1]) / 2 + 0.5, y_top - 0.92,
+            "trained with  $\\mathcal{L}_{MSE} = \\mathbb{E}\\,\\|\\epsilon - "
+            "\\epsilon_\\theta(x_t, t, c)\\|^2$",
+            ha="center", fontsize=9.5, color=INK, style="italic")
+
+    plt.tight_layout()
+    plt.savefig(OUT / "diffusion_process.png", bbox_inches="tight",
+                facecolor=WHITE)
+    plt.close()
+    print(f"  wrote {OUT / 'diffusion_process.png'}")
+
+
+def make_pd_curve():
+    """Perception–distortion trade-off scatter with the 4 methods."""
+    fig, ax = plt.subplots(figsize=(7.5, 4.5), dpi=200)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+
+    # Trade-off frontier curve
+    import numpy as np
+    xx = np.linspace(0.05, 0.95, 200)
+    yy = 1 - xx**0.7
+    ax.plot(xx, yy, "--", color=GRAY, lw=1.0, alpha=0.7,
+            label="perception–distortion frontier")
+
+    # Method points (x = distortion=lower better, y = perception=higher better)
+    methods = [
+        ("BasicVSR++", 0.18, 0.30, "#9C9CB0"),     # high fidelity, low perception
+        ("StableVSR",  0.60, 0.55, HIGH),
+        ("DGAF-VSR",   0.58, 0.62, TEAL),
+        ("WC-BD-SFT (Ours)", 0.50, 0.86, PURPLE),
+    ]
+    for name, x, y, col in methods:
+        is_ours = "Ours" in name
+        ax.scatter([x], [y], s=180 if is_ours else 90,
+                   c=col, edgecolors="white", linewidths=1.5, zorder=5,
+                   marker="*" if is_ours else "o")
+        dx = 0.025
+        dy = 0.04 if is_ours else 0.035
+        ax.text(x + dx, y + dy, name, fontsize=10,
+                color=col, fontweight="bold" if is_ours else "normal")
+
+    ax.set_xlabel("Distortion  ←  lower  ·  higher fidelity  →",
+                  fontsize=10, color=INK)
+    ax.set_ylabel("Perceptual quality  →  higher is better",
+                  fontsize=10, color=INK)
+    ax.set_title("Perception–Distortion Trade-off",
+                 fontsize=12, color=INK, fontweight="bold", pad=10)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_color(GRAY)
+    ax.spines["left"].set_color(GRAY)
+    ax.tick_params(colors=GRAY)
+    ax.grid(alpha=0.2)
+
+    plt.tight_layout()
+    plt.savefig(OUT / "pd_curve.png", bbox_inches="tight", facecolor=WHITE)
+    plt.close()
+    print(f"  wrote {OUT / 'pd_curve.png'}")
+
+
 if __name__ == "__main__":
     print("Generating diagrams...")
     make_band_pyramid()
     make_unet_injection()
     make_mag_phase_pipeline()
+    make_flickering_demo()
+    make_vsr_timeline()
+    make_diffusion_process()
+    make_pd_curve()
     print("Done.")

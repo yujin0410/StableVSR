@@ -372,9 +372,9 @@ def update_contents(prs):
     if target is None:
         return
 
-    target.left = Inches(4.2)
-    target.top = Inches(1.95)
-    target.width = Inches(8.5)
+    target.left = Inches(5.41)
+    target.top = Inches(2.40)
+    target.width = Inches(7.40)
     target.height = Inches(5.0)
 
     tf = target.text_frame
@@ -441,44 +441,38 @@ def slide_motivation(prs):
     set_section_title(s, 1, "Motivation",
                        subtitle="Why VSR + Diffusion, and why is it hard?")
 
-    # Three column cards
+    # Top — three brief paradigm cards
     cards = [
         ("Demand for HR video",
-         ["고품질 HR 영상 콘텐츠 수요 급증.",
-          "VSR — LR 입력의 spatial · temporal 정보를 종합해 HR 복원."]),
+         "고품질 HR 영상 수요 급증 · VSR이 spatial · temporal 정보로 HR 복원."),
         ("Diffusion priors win on detail",
-         ["CNN/GAN VSR — over-smoothing or training instability.",
-          "Diffusion priors → 사실적인 high-frequency texture (SR3, DDPM)."]),
+         "CNN/GAN의 over-smoothing · instability를 넘어 realistic texture (SR3, DDPM)."),
         ("But: temporal flickering",
-         ["프레임 독립적 stochastic denoising → HF detail 불일치.",
-          "복원된 texture가 frame 간 shimmer — 핵심 bottleneck."]),
+         "프레임 독립 stochastic denoising ⇒ HF detail이 frame 간 불일치 → flicker."),
     ]
-    for i, (header, lines) in enumerate(cards):
+    for i, (header, body) in enumerate(cards):
         x = 0.55 + i * 4.16
-        stripe_card(s, x, 1.0, 4.0, 2.65, accent=accent)
-        tb = add_textbox(s, x + 0.2, 1.18, 3.68, 2.45)
-        add_para(tb.text_frame, header, size=14, bold=True, color=accent)
-        for line in lines:
-            add_para(tb.text_frame, line, size=11.5, color=MUTED_INK,
-                      space_before=4)
+        stripe_card(s, x, 1.0, 4.0, 1.6, accent=accent)
+        tb = add_textbox(s, x + 0.2, 1.15, 3.65, 1.45)
+        add_para(tb.text_frame, header, size=13, bold=True, color=accent)
+        add_para(tb.text_frame, body, size=11, color=MUTED_INK, space_before=4)
 
-    # Research question — vertical accent stripe layout
-    add_card(s, 0.55, 3.95, 12.3, 3.05, fill=SOFT_BG2, line=LIGHT_GRAY,
+    # Middle — flickering visualization diagram
+    add_picture_fit(s, FIG_DIR / "flickering_demo.png",
+                     0.55, 2.85, 12.3, 2.6)
+
+    # Bottom — research question
+    add_card(s, 0.55, 5.7, 12.3, 1.3, fill=SOFT_BG2, line=LIGHT_GRAY,
               line_width=0.5)
-    add_left_stripe(s, 0.55, 3.95, 3.05, accent, thickness=0.10)
-    tb = add_textbox(s, 0.85, 4.15, 11.85, 2.85)
+    add_left_stripe(s, 0.55, 5.7, 1.3, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 5.83, 11.85, 1.15)
     add_para(tb.text_frame, "Research question",
-              size=13, bold=True, color=accent)
+              size=12, bold=True, color=accent)
     add_para(tb.text_frame,
-              "사전학습된 image diffusion model을 parameter-efficient한 "
-              "방법으로 video에 적응시키면서도, 3D attention이나 "
-              "full-network fine-tuning 없이 temporal consistency를 "
-              "달성할 수 있을까?",
-              size=15, bold=True, color=INK, space_before=8)
-    add_para(tb.text_frame,
-              "Key idea — pixel을 warping하는 대신, shift-stable한 "
-              "frequency-domain prior로 U-Net을 conditioning한다.",
-              size=12, italic=True, color=GRAY, space_before=10)
+              "사전학습된 image diffusion model을 parameter-efficient하게 video에 "
+              "adapting하면서도, 3D attention · full fine-tuning 없이 temporal "
+              "consistency를 달성할 수 있을까?",
+              size=13, bold=True, color=INK, space_before=4)
 
     set_notes(s, (
         "첫 슬라이드 — motivation입니다.\n\n"
@@ -507,74 +501,36 @@ def slide_related_work_paradigms(prs):
     set_section_title(s, 1, "Related Work · VSR Paradigms",
                        subtitle="From CNN regression to diffusion priors")
 
-    # Two-column landscape
-    stripe_card(s, 0.55, 1.0, 6.0, 5.95, accent=accent)
-    L = add_textbox(s, 0.85, 1.15, 5.45, 5.7)
-    add_para(L.text_frame, "CNN-based VSR", size=14, bold=True, color=accent)
-    for sub_h, sub_b in [
-        ("Alignment", "TOFlow · RBPN · TDAN · EDVR (NTIRE'19)"),
-        ("Recurrent propagation", "BasicVSR · BasicVSR++ — REDS SOTA"),
-        ("Transformer attention", "VRT · RVRT — long-range temporal"),
-        ("Real-world", "RealBasicVSR — degradation-aware"),
-    ]:
-        p = L.text_frame.add_paragraph()
-        p.space_before = Pt(3)
-        r1 = p.add_run()
-        r1.text = "▸  " + sub_h + "  "
-        r1.font.size = Pt(11.5)
-        r1.font.bold = True
-        r1.font.color.rgb = INK
-        r2 = p.add_run()
-        r2.text = sub_b
-        r2.font.size = Pt(10.5)
-        r2.font.color.rgb = GRAY
+    # Top — timeline diagram
+    add_picture_fit(s, FIG_DIR / "vsr_timeline.png",
+                     0.40, 0.95, 12.55, 3.0)
 
-    add_para(L.text_frame, "한계 — pixel-loss로 인한 over-smoothing,",
-              size=11.5, italic=True, color=accent, space_before=10)
-    add_para(L.text_frame, "alignment 오류 시 visible artifacts.",
-              size=11.5, italic=True, color=accent)
-
-    add_para(L.text_frame, "GAN-based VSR",
-              size=14, bold=True, color=accent, space_before=12)
-    add_para(L.text_frame, "▸  SRGAN · ESRGAN · VideoGigaGAN (CVPR'24)",
-              size=11, color=MUTED_INK)
-    add_para(L.text_frame, "한계 — training instability, 제한된 texture diversity.",
-              size=11.5, italic=True, color=accent, space_before=4)
-
-    # Right column — Diffusion
-    stripe_card(s, 6.85, 1.0, 6.0, 5.95, accent=accent)
-    R = add_textbox(s, 7.15, 1.15, 5.45, 5.7)
-    add_para(R.text_frame, "Diffusion-based VSR — image prior 적응",
-              size=14, bold=True, color=accent)
-    add_para(R.text_frame,
-              "▸  StableVSR (ECCV'24) — 본 연구의 직접 baseline.",
-              size=11.5, color=MUTED_INK, space_before=4)
-    add_para(R.text_frame,
-              "      ControlNet + RAFT-warped neighbor x̂₀, "
-              "bidirectional sampling.",
-              size=10.5, color=GRAY)
-    add_para(R.text_frame,
-              "▸  MGLD-VSR — motion-guided latent diffusion.",
-              size=11.5, color=MUTED_INK, space_before=4)
-    add_para(R.text_frame,
-              "▸  DGAF-VSR (CVPR'26) — OGWM + FTCM, feature-domain warping.",
-              size=11.5, color=MUTED_INK, space_before=4)
-
-    add_para(R.text_frame, "Diffusion-based VSR — video-native",
-              size=14, bold=True, color=accent, space_before=10)
-    add_para(R.text_frame, "▸  Upscale-A-Video · Stable Video Diffusion",
-              size=11, color=MUTED_INK)
-    add_para(R.text_frame, "한계 — 학습 비용 / catastrophic forgetting 위험.",
-              size=11.5, italic=True, color=accent, space_before=4)
-
-    add_para(R.text_frame, "Recent 2025 works",
-              size=14, bold=True, color=accent, space_before=10)
-    add_para(R.text_frame,
-              "▸  Robustness — DiffVSR · STAR · DC-VSR",
-              size=11, color=MUTED_INK)
-    add_para(R.text_frame,
-              "▸  Efficiency  — DLoRAL · UltraVSR · SeedVR2",
-              size=11, color=MUTED_INK)
+    # Bottom — three paradigm summary cards
+    CNN_COL = RGBColor(0x7C, 0x7C, 0x8E)
+    GAN_COL = RGBColor(0xD8, 0x71, 0x58)
+    cards = [
+        ("CNN-based",
+         ["Alignment-driven: TOFlow / EDVR / BasicVSR++ / VRT.",
+          "Pixel loss ⇒ over-smoothed · alignment fragile."],
+         CNN_COL),
+        ("GAN-based",
+         ["SRGAN · ESRGAN · VideoGigaGAN (CVPR'24).",
+          "Training instability · bounded texture diversity."],
+         GAN_COL),
+        ("Diffusion-based",
+         ["Image-prior adapt: StableVSR (baseline) · DGAF-VSR.",
+          "Video-native: Upscale-A-Video · SVD.",
+          "Recent 2025: DiffVSR / STAR / DC-VSR / DLoRAL / UltraVSR / SeedVR2."],
+         HIGH_BAND),
+    ]
+    for i, (h, lines, col) in enumerate(cards):
+        x = 0.55 + i * 4.16
+        stripe_card(s, x, 4.15, 4.0, 2.85, accent=col)
+        tb = add_textbox(s, x + 0.2, 4.30, 3.65, 2.65)
+        add_para(tb.text_frame, h, size=13, bold=True, color=col)
+        for line in lines:
+            add_para(tb.text_frame, "▸ " + line, size=10.5,
+                      color=MUTED_INK, space_before=3)
 
     set_notes(s, (
         "관련 연구를 두 축으로 정리했습니다.\n\n"
@@ -749,64 +705,49 @@ def slide_prelim_vsr_diffusion(prs):
     set_section_title(s, 2, "Preliminaries · VSR & Diffusion",
                        subtitle="Formulation and the StableVSR pipeline")
 
-    # Left — VSR formulation
-    stripe_card(s, 0.55, 1.0, 6.0, 5.95, accent=accent)
-    L = add_textbox(s, 0.85, 1.15, 5.45, 5.7)
-    add_para(L.text_frame, "Video Super-Resolution", size=14, bold=True,
-              color=accent)
-    add_para(L.text_frame, "LR sequence → HR sequence with BIx4 degradation",
-              size=12, color=MUTED_INK, space_before=2)
-    add_para(L.text_frame,
-              "$I^{LR} = \\mathcal{D}_{bicubic}(I^{HR};\\, s=4)$",
-              size=12, italic=True, color=GRAY, space_before=4)
+    # Top equation strip — VSR formulation
+    add_card(s, 0.55, 0.95, 12.3, 0.85, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 0.95, 0.85, accent, thickness=0.08)
+    tb = add_textbox(s, 0.55, 1.02, 12.3, 0.78, anchor=MSO_ANCHOR.MIDDLE)
+    add_para(tb.text_frame, "VSR — LR → HR with BIx4 degradation",
+              size=11, bold=True, color=accent, align=PP_ALIGN.CENTER)
+    add_para(tb.text_frame,
+              "I^LR  =  𝒟_{bicubic}(I^HR ;  s = 4)",
+              size=15, bold=True, color=INK, align=PP_ALIGN.CENTER,
+              space_before=2)
 
-    add_para(L.text_frame, "Two core components",
-              size=12.5, bold=True, color=INK, space_before=12)
-    add_para(L.text_frame, "▸  Temporal alignment — flow / deformable / recurrent",
-              size=11.5, color=MUTED_INK, space_before=2)
-    add_para(L.text_frame, "▸  Temporal aggregation — fuse aligned features",
-              size=11.5, color=MUTED_INK, space_before=2)
+    # Middle — diffusion process diagram
+    add_picture_fit(s, FIG_DIR / "diffusion_process.png",
+                     0.55, 1.95, 12.3, 2.85)
 
-    add_para(L.text_frame, "Perception–distortion trade-off",
-              size=12.5, bold=True, color=INK, space_before=12)
+    # Bottom — StableVSR baseline card with key text
+    stripe_card(s, 0.55, 5.00, 6.0, 1.95, accent=accent)
+    L = add_textbox(s, 0.75, 5.15, 5.6, 1.80)
+    add_para(L.text_frame, "StableVSR baseline (Rota et al., ECCV'24)",
+              size=13, bold=True, color=accent)
     add_para(L.text_frame,
+              "▸  ControlNet + RAFT-warped neighbor x̂₀",
+              size=11, color=MUTED_INK, space_before=4)
+    add_para(L.text_frame,
+              "▸  Frame-wise Bidirectional Sampling",
+              size=11, color=MUTED_INK, space_before=2)
+    add_para(L.text_frame,
+              "→  본 연구는 이 scaffold를 그대로 두고 WCM만 추가.",
+              size=11, italic=True, color=accent, space_before=4)
+
+    # Bottom-right — perception-distortion trade-off note
+    stripe_card(s, 6.85, 5.00, 6.0, 1.95, accent=accent)
+    R = add_textbox(s, 7.05, 5.15, 5.6, 1.80)
+    add_para(R.text_frame, "Perception–distortion trade-off",
+              size=13, bold=True, color=accent)
+    add_para(R.text_frame,
               "Blau & Michaeli (2018) — pixel fidelity와 perceptual "
-              "quality를 동시에 만족할 수 없음. 본 연구는 perceptual 극단을 "
-              "추구합니다.",
-              size=11.5, color=MUTED_INK, space_before=4)
-
-    # Right — Diffusion VSR + StableVSR baseline
-    stripe_card(s, 6.85, 1.0, 6.0, 5.95, accent=accent)
-    R = add_textbox(s, 7.15, 1.15, 5.45, 5.7)
-    add_para(R.text_frame, "Latent diffusion model (LDM)",
-              size=14, bold=True, color=accent)
+              "quality는 동시 최대화 불가.",
+              size=11, color=MUTED_INK, space_before=4)
     add_para(R.text_frame,
-              "Forward — clean latent에 점진적으로 noise 추가.",
-              size=11.5, color=MUTED_INK, space_before=4)
-    add_para(R.text_frame,
-              "Reverse — U-Net이 noise 예측, $\\epsilon$-MSE로 학습.",
-              size=11.5, color=MUTED_INK, space_before=2)
-    add_para(R.text_frame,
-              "Stable Diffusion v2.1 — text-to-image LDM, 본 연구의 backbone.",
-              size=11.5, color=MUTED_INK, space_before=2)
-
-    add_para(R.text_frame, "StableVSR baseline (Rota et al., ECCV'24)",
-              size=14, bold=True, color=accent, space_before=12)
-    add_para(R.text_frame,
-              "▸  ControlNet으로 SD를 VSR에 adapt — Temporal Conditioning "
-              "Module (TCM).",
-              size=11.5, color=MUTED_INK, space_before=4)
-    add_para(R.text_frame,
-              "▸  매 step마다 인접 프레임의 x̂₀를 RAFT optical flow로 "
-              "현재 프레임에 warping → ControlNet input.",
-              size=11.5, color=MUTED_INK, space_before=2)
-    add_para(R.text_frame,
-              "▸  Frame-wise Bidirectional Sampling — denoising step마다 "
-              "forward / backward 방향 교대.",
-              size=11.5, color=MUTED_INK, space_before=2)
-    add_para(R.text_frame,
-              "→  본 연구는 이 scaffold를 그대로 사용하고 WCM만 추가.",
-              size=11.5, italic=True, color=accent, space_before=6)
+              "본 연구는 perceptual 극단을 추구하는 설계.",
+              size=11, italic=True, color=accent, space_before=4)
 
     set_notes(s, (
         "Preliminaries 첫 번째 슬라이드입니다. VSR과 diffusion-based "
@@ -861,15 +802,18 @@ def slide_prelim_dwt_dtcwt(prs):
     add_para(R.text_frame, "Dual-Tree Complex Wavelet (DT-CWT)",
               size=14, bold=True, color=HIGH_BAND)
     add_para(R.text_frame,
-              "✓  Near shift-invariance — 두 개의 parallel tree (Hilbert "
-              "transform pair).",
-              size=12, color=MUTED_INK, space_before=6)
+              "✓  Near shift-invariance — 두 parallel tree (Hilbert transform pair).",
+              size=11.5, color=MUTED_INK, space_before=4)
     add_para(R.text_frame,
               "✓  6 directional subbands per scale — ±15°, ±45°, ±75°.",
-              size=12, color=MUTED_INK, space_before=2)
+              size=11.5, color=MUTED_INK, space_before=2)
     add_para(R.text_frame,
-              "✓  Complex coefficients → (magnitude, phase) 분해.",
-              size=12, color=MUTED_INK, space_before=2)
+              "✓  Complex coefficients C = a + ib  ⇒  (magnitude, phase) 분해:",
+              size=11.5, color=MUTED_INK, space_before=2)
+    add_para(R.text_frame,
+              "M = |C| = √(a² + b²)     ·     φ = ∠C ∈ [−π, π)",
+              size=12.5, bold=True, color=INK, space_before=4,
+              align=PP_ALIGN.CENTER)
 
     # Bottom — empirical proof image
     add_picture_fit(s, FIG_DIR / "dtcwt_shift_zoom_v4-1.png",
@@ -983,41 +927,49 @@ def slide_why_dtcwt(prs):
     set_section_title(s, 3, "Method · Why DT-CWT, not DWT or Fourier",
                        subtitle="Three reasons from the thesis")
 
+    # Top — DT-CWT decomposition equation
+    add_card(s, 0.55, 0.95, 12.3, 0.85, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 0.95, 0.85, accent, thickness=0.08)
+    tb = add_textbox(s, 0.55, 1.02, 12.3, 0.78, anchor=MSO_ANCHOR.MIDDLE)
+    add_para(tb.text_frame, "DT-CWT decomposition (J = 4)",
+              size=10.5, bold=True, color=accent, align=PP_ALIGN.CENTER)
+    add_para(tb.text_frame,
+              "DT-CWT_{J=4}(I^{LR}_t)  =  ( I^{LP}_t ,  { C^{(j,d)}_t }_{j=1..4, d=1..6} ),     "
+              "C^{(j,d)} ∈ ℂ^{H/2ʲ × W/2ʲ × 3}",
+              size=13, bold=True, color=INK, align=PP_ALIGN.CENTER,
+              space_before=2)
+
     reasons = [
         ("① Near shift-invariance",
          "Magnitudes ≈ stable under sub-pixel translations.\n"
-         "DWT는 critical decimation으로 frame 간 inconsistent conditioning.\n"
-         "→  shift-stable conditioning is essential for video.",
+         "DWT는 critical decimation으로 frame 간 inconsistent conditioning.",
          HIGH_BAND),
         ("② Six directional subbands",
          "±15°, ±45°, ±75° at each scale (2× DWT's 3 subbands).\n"
-         "Hair / foliage / fabric의 임의 방향 edge를 보존.\n"
-         "→  decoder가 oriented HF detail을 합성하기에 적합.",
+         "Hair / foliage / fabric의 임의 방향 edge 보존 — oriented HF detail 합성에 적합.",
          accent),
         ("③ Complex coeffs → magnitude · phase",
-         "Magnitude: shift-stable energy descriptor → texture.\n"
-         "Phase: precise spatial localization → structure.\n"
-         "→  band-decoupled SFT pathway에 직접 대응.",
+         "M = |C| = √(a²+b²) → texture (shift-stable energy)\n"
+         "φ = ∠C → structure (precise spatial localization) — BD-SFT pathway에 직접 대응.",
          LOW_BAND),
     ]
     for i, (h, body, col) in enumerate(reasons):
-        y = 1.0 + i * 1.85
-        stripe_card(s, 0.55, y, 12.3, 1.7, accent=col, stripe_left=True,
+        y = 1.95 + i * 1.55
+        stripe_card(s, 0.55, y, 12.3, 1.40, accent=col, stripe_left=True,
                      stripe_top=False)
-        tb = add_textbox(s, 0.85, y + 0.12, 12.0, 1.55)
-        add_para(tb.text_frame, h, size=14, bold=True, color=col)
+        tb = add_textbox(s, 0.85, y + 0.10, 12.0, 1.25)
+        add_para(tb.text_frame, h, size=13.5, bold=True, color=col)
         for line in body.split("\n"):
-            add_para(tb.text_frame, line, size=11.5, color=MUTED_INK,
+            add_para(tb.text_frame, line, size=11, color=MUTED_INK,
                       space_before=2, space_after=2)
 
-    # Bottom — Fourier comparison
-    add_card(s, 0.55, 6.7, 12.3, 0.45, fill=None, line=None)
+    # Fourier note
     tb = add_textbox(s, 0.55, 6.65, 12.3, 0.35)
     add_para(tb.text_frame,
-              "vs. Fourier — globally-supported basis ⇒ single edge alters "
-              "the entire spectrum; cannot vary spatially. DT-CWT combines "
-              "Fourier's mag-phase factorization with wavelet's spatial "
-              "localization.",
+              "vs. Fourier — globally-supported basis ⇒ cannot vary spatially. "
+              "DT-CWT combines Fourier's mag-phase factorization with wavelet's "
+              "spatial localization.",
               size=10.5, italic=True, color=GRAY, align=PP_ALIGN.CENTER)
 
     set_notes(s, (
@@ -1756,29 +1708,34 @@ def slide_discussion(prs):
     s, accent = add_content_slide(prs, section=5)
     set_section_title(s, 5, "Discussion · Trade-offs Revealed")
 
+    # Left — P-D curve diagram
+    add_picture_fit(s, FIG_DIR / "pd_curve.png",
+                     0.55, 1.0, 6.0, 5.95)
+
+    # Right — three trade-off cards
     cards = [
-        ("Perception–distortion",
-         "BasicVSR++ → 고정밀 pixel.   DM 방법 → 고품질 perceptual.\n"
-         "WC-BD-SFT는 perceptual 극단에 위치 — REDS4 / UDM10 NR 1위.",
+        ("① Perception–distortion (paradigms)",
+         "BasicVSR++ → high pixel fidelity.\n"
+         "DM 방법 → high perceptual quality.\n"
+         "WC-BD-SFT는 perceptual 극단 — REDS4 / UDM10 NR 1위.",
          SEC[5]),
-        ("Specialization–generalization",
-         "REDS-only 학습 — WCM 기여 isolation.\n"
-         "REDS-like statistics에 강함 (REDS4 최강) · Vid4 SD에서는 gain 감소.",
+        ("② Specialization–generalization",
+         "REDS-only 학습 → WCM 기여 isolation.\n"
+         "REDS-like statistics에 강함, Vid4 SD에서는 gain 감소.",
          SEC[3]),
-        ("Temporal stability ↔ motion",
-         "UDM10 (32 frame, 정적) → tLPIPS 악화.\n"
-         "SPMCS (long motion) → tLPIPS 개선.\n"
-         "Bidirectional sampling은 motion을 흡수 매개로 사용.",
+        ("③ Temporal stability ↔ motion",
+         "UDM10 (32-frame, 정적) → tLPIPS 악화.\n"
+         "SPMCS (long-motion) → tLPIPS 개선.",
          SEC[2]),
     ]
     for i, (h, body, col) in enumerate(cards):
         y = 1.0 + i * 2.0
-        stripe_card(s, 0.55, y, 12.3, 1.85, accent=col, stripe_left=True,
+        stripe_card(s, 6.85, y, 6.0, 1.85, accent=col, stripe_left=True,
                      stripe_top=False)
-        tb = add_textbox(s, 0.85, y + 0.13, 12.0, 1.65)
-        add_para(tb.text_frame, h, size=13, bold=True, color=col)
+        tb = add_textbox(s, 7.15, y + 0.13, 5.65, 1.65)
+        add_para(tb.text_frame, h, size=12, bold=True, color=col)
         for line in body.split("\n"):
-            add_para(tb.text_frame, line, size=11.5, color=MUTED_INK,
+            add_para(tb.text_frame, line, size=10.5, color=MUTED_INK,
                       space_before=2, space_after=2)
 
     set_notes(s, (
