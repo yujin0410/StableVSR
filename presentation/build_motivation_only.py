@@ -155,19 +155,28 @@ def add_picture_fit(slide, path, left, top, width, height):
 
 
 def main():
+    """Build the file by APPENDING our new slide to the template — keeping the
+    original 9 template slides intact — then reordering so our slide is FIRST.
+
+    This avoids the 'Duplicate name slide1.xml' zip error caused by deleting
+    slide-id entries while their underlying parts remain in the package.
+    """
     prs = Presentation(str(TEMPLATE))
 
-    # Drop the template's pre-existing slides; we only need a blank canvas
-    # using layout 12 ('16_제목만').
-    sldIdLst = prs.slides._sldIdLst
-    for child in list(sldIdLst):
-        sldIdLst.remove(child)
-
+    # Append the new slide using layout 12 ('16_제목만').
     s = prs.slides.add_slide(prs.slide_layouts[12])
-    # Drop layout's default body placeholder
+    # Drop the layout's default body placeholder.
     for ph in list(s.placeholders):
         if ph.placeholder_format.idx == 10:
             _rm(ph)
+
+    # Move the newly added slide to position 0 so the user opens straight
+    # into the redesigned Motivation slide; the other 9 template slides
+    # remain after it as untouched reference.
+    sldIdLst = prs.slides._sldIdLst
+    new_slide_id = sldIdLst[-1]
+    sldIdLst.remove(new_slide_id)
+    sldIdLst.insert(0, new_slide_id)
 
     set_title(s, "Motivation", "Why VSR + Diffusion, and why is it hard?")
 
