@@ -1881,6 +1881,193 @@ def slide_conclusion(prs):
     ))
 
 
+def slide_references(prs):
+    """Compact references slide grouped by category."""
+    s, accent = add_content_slide(prs, section=6)
+    set_section_title(s, 6, "References", subtitle="Key papers cited in this work")
+
+    # Left column ─ Baseline / Diffusion VSR / VSR landscape
+    stripe_card(s, 0.40, 0.95, 6.20, 6.05, accent=accent)
+    L = add_textbox(s, 0.55, 1.05, 5.95, 5.85)
+    add_para(L.text_frame, "Direct baseline & comparators",
+              size=11, bold=True, color=accent)
+    refs_baseline = [
+        ("[1]", "Rota et al.",
+         "Enhancing Perceptual Quality in VSR via Diffusion (StableVSR). "
+         "ECCV 2024."),
+        ("[2]", "Song & Yoon",
+         "DGAF-VSR: Dense Feature-wise Temporal Conditioning. "
+         "CVPR 2026."),
+        ("[3]", "Chan et al.",
+         "BasicVSR++: Improving VSR with Enhanced Propagation. "
+         "CVPR 2022."),
+        ("[4]", "Yang et al.",
+         "Motion-guided Latent Diffusion (MGLD-VSR). 2023."),
+        ("[5]", "Zhou et al.",
+         "Upscale-A-Video: Temporal-Consistent Diffusion VSR. CVPR 2024."),
+        ("[6]", "Blattmann et al.",
+         "Stable Video Diffusion (SVD). 2023."),
+    ]
+    for k, name, body in refs_baseline:
+        p = L.text_frame.add_paragraph()
+        p.space_before = Pt(3)
+        r1 = p.add_run()
+        r1.text = f"{k} {name}.  "
+        r1.font.size = Pt(9.5)
+        r1.font.bold = True
+        r1.font.color.rgb = INK
+        r2 = p.add_run()
+        r2.text = body
+        r2.font.size = Pt(9.5)
+        r2.font.color.rgb = MUTED_INK
+
+    add_para(L.text_frame, "Recent 2025 diffusion VSR",
+              size=11, bold=True, color=accent, space_before=8)
+    refs_recent = [
+        ("[7]",  "Li et al.",         "DiffVSR. 2025."),
+        ("[8]",  "Xie et al.",        "STAR — Spatio-Temporal Augmented Restoration. 2025."),
+        ("[9]",  "Lee et al.",        "DC-VSR — Decoupled Conditioning. 2025."),
+        ("[10]", "Sun et al.",        "DLoRAL — One-step Diffusion VSR. 2025."),
+        ("[11]", "Liu et al.",        "UltraVSR. 2025."),
+        ("[12]", "Wang et al.",       "SeedVR2. 2025."),
+    ]
+    for k, name, body in refs_recent:
+        p = L.text_frame.add_paragraph()
+        p.space_before = Pt(2)
+        r1 = p.add_run()
+        r1.text = f"{k} {name}.  "
+        r1.font.size = Pt(9.5)
+        r1.font.bold = True
+        r1.font.color.rgb = INK
+        r2 = p.add_run()
+        r2.text = body
+        r2.font.size = Pt(9.5)
+        r2.font.color.rgb = MUTED_INK
+
+    add_para(L.text_frame, "VSR foundations",
+              size=11, bold=True, color=accent, space_before=8)
+    refs_vsr = [
+        ("[13]", "Chan et al.",   "BasicVSR. CVPR 2021."),
+        ("[14]", "Wang et al.",   "EDVR — NTIRE 2019 VSR Winner. CVPRW 2019."),
+        ("[15]", "Liang et al.",  "VRT — Video Restoration Transformer. TIP 2024."),
+        ("[16]", "Xu et al.",     "VideoGigaGAN. CVPR 2024."),
+        ("[17]", "Wang et al.",   "Real-BasicVSR. CVPR 2022."),
+    ]
+    for k, name, body in refs_vsr:
+        p = L.text_frame.add_paragraph()
+        p.space_before = Pt(2)
+        r1 = p.add_run()
+        r1.text = f"{k} {name}.  "
+        r1.font.size = Pt(9.5)
+        r1.font.bold = True
+        r1.font.color.rgb = INK
+        r2 = p.add_run()
+        r2.text = body
+        r2.font.size = Pt(9.5)
+        r2.font.color.rgb = MUTED_INK
+
+    # Right column ─ Building blocks, wavelets, metrics, datasets
+    stripe_card(s, 6.75, 0.95, 6.20, 6.05, accent=accent)
+    R = add_textbox(s, 6.90, 1.05, 5.95, 5.85)
+    add_para(R.text_frame, "Building blocks",
+              size=11, bold=True, color=accent)
+    refs_blocks = [
+        ("[18]", "Rombach et al.",  "Latent Diffusion (Stable Diffusion). CVPR 2022."),
+        ("[19]", "Ho et al.",       "Denoising Diffusion Probabilistic Models. NeurIPS 2020."),
+        ("[20]", "Zhang et al.",    "ControlNet. ICCV 2023."),
+        ("[21]", "Teed & Deng",     "RAFT — Optical Flow. ECCV 2020."),
+        ("[22]", "Si et al.",       "FreeU — Free Lunch in Diffusion U-Net. CVPR 2024."),
+        ("[23]", "Wang et al.",     "Spatial Feature Transform (SFT). CVPR 2018."),
+        ("[24]", "Blau & Michaeli", "Perception-Distortion Trade-off. CVPR 2018."),
+    ]
+    for k, name, body in refs_blocks:
+        p = R.text_frame.add_paragraph()
+        p.space_before = Pt(2)
+        r1 = p.add_run()
+        r1.text = f"{k} {name}.  "
+        r1.font.size = Pt(9.5)
+        r1.font.bold = True
+        r1.font.color.rgb = INK
+        r2 = p.add_run()
+        r2.text = body
+        r2.font.size = Pt(9.5)
+        r2.font.color.rgb = MUTED_INK
+
+    add_para(R.text_frame, "Wavelet methods",
+              size=11, bold=True, color=accent, space_before=8)
+    refs_wave = [
+        ("[25]", "Selesnick et al.", "Dual-Tree Complex Wavelet Transform. SPM 2005."),
+        ("[26]", "Kingsbury",        "Complex Wavelets — Shift-Invariance. ACHA 2001."),
+        ("[27]", "Cotter",           "pytorch_wavelets. 2019."),
+        ("[28]", "Liu et al.",       "MWCNN — Multi-level Wavelet CNN. CVPRW 2018."),
+        ("[29]", "Huang et al.",     "WaveletSRNet. ICCV 2017."),
+        ("[30]", "Qiu et al.",       "FTVSR — Frequency-Temporal VSR. ECCV 2022."),
+        ("[31]", "Sigillo et al.",   "ResQu — Quaternion Wavelet Diffusion SR. 2025."),
+        ("[32]", "Du et al.",        "WaveDiT — Wavelet DiT for SR. 2025."),
+    ]
+    for k, name, body in refs_wave:
+        p = R.text_frame.add_paragraph()
+        p.space_before = Pt(2)
+        r1 = p.add_run()
+        r1.text = f"{k} {name}.  "
+        r1.font.size = Pt(9.5)
+        r1.font.bold = True
+        r1.font.color.rgb = INK
+        r2 = p.add_run()
+        r2.text = body
+        r2.font.size = Pt(9.5)
+        r2.font.color.rgb = MUTED_INK
+
+    add_para(R.text_frame, "Datasets & metrics",
+              size=11, bold=True, color=accent, space_before=8)
+    refs_dm = [
+        ("[33]", "Nah et al.",   "REDS — NTIRE 2019. CVPRW 2019."),
+        ("[34]", "Liu & Sun",    "Vid4. TPAMI 2014."),
+        ("[35]", "Yi et al.",    "UDM10 — Progressive Fusion VSR. ICCV 2019."),
+        ("[36]", "Tao et al.",   "SPMCS — Detail-revealing VSR. ICCV 2017."),
+        ("[37]", "Zhang et al.", "LPIPS. CVPR 2018."),
+        ("[38]", "Ding et al.",  "DISTS. TPAMI 2020."),
+        ("[39]", "Ke et al.",    "MUSIQ. ICCV 2021."),
+        ("[40]", "Wang et al.",  "CLIP-IQA. AAAI 2023."),
+        ("[41]", "Mittal et al.","NIQE. SPL 2013."),
+        ("[42]", "Chu et al.",   "tLPIPS / tOF — Temporal Consistency. ACM TOG 2020."),
+    ]
+    for k, name, body in refs_dm:
+        p = R.text_frame.add_paragraph()
+        p.space_before = Pt(2)
+        r1 = p.add_run()
+        r1.text = f"{k} {name}.  "
+        r1.font.size = Pt(9.5)
+        r1.font.bold = True
+        r1.font.color.rgb = INK
+        r2 = p.add_run()
+        r2.text = body
+        r2.font.size = Pt(9.5)
+        r2.font.color.rgb = MUTED_INK
+
+    # Footnote
+    tb = add_textbox(s, 0.55, 7.05, 12.3, 0.30)
+    add_para(tb.text_frame,
+              "전체 인용 목록은 학위논문의 reference.bib 참조 (73 entries).",
+              size=9, italic=True, color=GRAY, align=PP_ALIGN.CENTER)
+
+    set_notes(s, (
+        "References 슬라이드입니다. 발표에 직접 인용한 주요 논문 42편을 "
+        "카테고리별로 정리했습니다.\n\n"
+        "왼쪽 — direct baseline과 comparator 입니다. StableVSR [1]이 본 "
+        "연구의 직접 baseline, DGAF-VSR [2]이 가장 최근의 강한 "
+        "diffusion VSR comparator 입니다.\n\n"
+        "2025년의 최신 diffusion VSR 연구 6편 (DiffVSR, STAR, DC-VSR, "
+        "DLoRAL, UltraVSR, SeedVR2)을 포함했고, VSR foundation으로 "
+        "BasicVSR, EDVR, VRT, VideoGigaGAN 등도 인용했습니다.\n\n"
+        "오른쪽 — building block 7편 (Stable Diffusion, DDPM, ControlNet, "
+        "RAFT, FreeU, SFT, Perception-distortion), wavelet method 8편, "
+        "datasets와 metrics 10편 입니다.\n\n"
+        "전체 인용 목록 73편은 학위논문의 reference.bib에 모두 명시되어 "
+        "있습니다."
+    ))
+
+
 def slide_future_work(prs):
     s, accent = add_content_slide(prs, section=6)
     set_section_title(s, 6, "Future Work")
@@ -2013,7 +2200,7 @@ NOTES_EXISTING = {
         "band를 encoder로 routing하는 설계가 pixel-level loss가 잡지 "
         "못하는 spectral content를 효과적으로 보존합니다."
     ),
-    30: (  # Thanks
+    31: (  # Thanks — moved from 30 to 31 after inserting References at position 30
         "이상으로 발표를 마칩니다. 경청해 주셔서 감사합니다.\n\n"
         "질문 받겠습니다."
     ),
@@ -2060,6 +2247,7 @@ def main():
     slide_limitations(prs)               # 28
     slide_conclusion(prs)                # 29
     slide_future_work(prs)               # 30
+    slide_references(prs)                # 31
 
     # Existing template slides indices: 0 Cover, 1 Contents, 2 Arch,
     # 3 SubbandBlock, 4 Eval overview, 5 LR subbands, 6 GT subbands,
@@ -2095,7 +2283,8 @@ def main():
         28,   # 28. Limitations
         29,   # 29. Conclusion
         30,   # 30. Future Work
-        8,    # 31. Thanks
+        31,   # 31. References
+        8,    # 32. Thanks
     ]
     reorder_slides(prs, final_order)
 
