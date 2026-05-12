@@ -113,13 +113,10 @@ def stripe_card(slide, left, top, w, h, *, accent, fill=WHITE,
 
 
 def set_title(slide, title, subtitle=""):
-    ph = None
-    for cand in slide.placeholders:
-        if cand.placeholder_format.idx == 1:
-            ph = cand
-            break
-    tf = ph.text_frame
-    tf.clear()
+    """Add a centred-vertical title textbox over the navy bar."""
+    tb = slide.shapes.add_textbox(Inches(0.4), Inches(0.05),
+                                   Inches(12.5), Inches(0.6))
+    tf = tb.text_frame
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     tf.margin_left = Inches(0.1)
     p = tf.paragraphs[0]
@@ -155,28 +152,32 @@ def add_picture_fit(slide, path, left, top, width, height):
 
 
 def main():
-    """Build the file by APPENDING our new slide to the template — keeping the
-    original 9 template slides intact — then reordering so our slide is FIRST.
+    """Build a brand-new 1-slide PPT from scratch — no template carry-over.
 
-    This avoids the 'Duplicate name slide1.xml' zip error caused by deleting
-    slide-id entries while their underlying parts remain in the package.
+    The previous attempts used the template (which has 9 pre-existing slides
+    and rich layout inheritance) and either reordered or appended; PowerPoint
+    repair mode kept stripping the added slide. Building from scratch with
+    a Blank layout sidesteps all template-related corruption paths.
     """
-    prs = Presentation(str(TEMPLATE))
+    prs = Presentation()  # no template
+    # Set 16:9 widescreen dimensions to match the main deck (13.33 × 7.5 in).
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
 
-    # Append the new slide using layout 12 ('16_제목만').
-    s = prs.slides.add_slide(prs.slide_layouts[12])
-    # Drop the layout's default body placeholder.
-    for ph in list(s.placeholders):
-        if ph.placeholder_format.idx == 10:
-            _rm(ph)
+    # Use the blank layout (index 6 in the default master).
+    blank_layout = prs.slide_layouts[6]
+    s = prs.slides.add_slide(blank_layout)
 
-    # Move the newly added slide to position 0 so the user opens straight
-    # into the redesigned Motivation slide; the other 9 template slides
-    # remain after it as untouched reference.
-    sldIdLst = prs.slides._sldIdLst
-    new_slide_id = sldIdLst[-1]
-    sldIdLst.remove(new_slide_id)
-    sldIdLst.insert(0, new_slide_id)
+    # Add a dark navy title bar at the top (mimics the main deck's layout 12).
+    title_bar = s.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        Inches(0), Inches(0), Inches(13.333), Inches(0.7),
+    )
+    title_bar.fill.solid()
+    title_bar.fill.fore_color.rgb = RGBColor(0x15, 0x12, 0x7C)  # template navy
+    title_bar.line.fill.background()
+    title_bar.shadow.inherit = False
+    title_bar.text_frame.text = ""
 
     set_title(s, "Motivation", "Why VSR + Diffusion, and why is it hard?")
 
