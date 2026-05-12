@@ -1,25 +1,33 @@
-"""Build v2 of the Master's thesis defense deck.
+"""Build v3 of the Master's thesis defense deck.
 
-Changes vs. v1 (from user review):
-  1. Cover — replace "SEMINAR" with the full thesis title.
-  2. Contents — numbered sections starting from "Introduction"; show subsections.
-  3. Title text on content slides made WHITE (the layout has a dark navy bar at
-     y=0 that hid the previous navy title).
-  4. Delete the layout's default body placeholder ("마스터 텍스트 스타일을 편집합니다")
-     on every new content slide.
-  5. Visual refresh — section-coded accent colors, numbered badges, more varied
-     cards, and roughly 35% less prose so the slides read at a glance.
-  6. Speaker notes added to every slide.
+Changes vs. v2 (author review round 3):
+  1. Cover — thesis title centred horizontally.
+  2. Speaker notes — rewritten in Korean; technical keywords stay English.
+  3. Contents — section text now in black (subsections in muted gray).
+  4. Removed the section-number 'page-number-like' badges at the top of
+     every content slide (both the leading "1  " inside the title and the
+     right-corner oval); the layout's auto slide number at bottom-right
+     stays.
+  5. Card shapes refined — softer fills, accent strips, less border weight.
+  6. Added matplotlib-generated diagrams (band_pyramid, unet_injection,
+     mag_phase_pipe) inside the Method section.
+  7. Related Work rewritten with explicit motivation for *why* this method
+     was designed, and includes recent 2025 papers (DiffVSR, STAR, DC-VSR,
+     DLoRAL, UltraVSR, SeedVR2).
+  8. Method · Why DT-CWT slide now follows the thesis's 3-reason structure
+     (near shift-invariance · six directional subbands · explicit phase).
+  9. Preliminaries section (Chapter 2) added — VSR & diffusion-based VSR
+     formulation, DWT limitations, DT-CWT, Spatial Feature Transform.
+
+Total slides: 31.
 """
 
-from copy import deepcopy
 from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt, Inches
 
 
@@ -27,30 +35,28 @@ TEMPLATE = Path("/tmp/thesis_work/template.pptx")
 FIG_DIR = Path("/tmp/thesis_work/fig_png")
 OUT = Path("/home/user/StableVSR/presentation/WC_BD_SFT_Defense_Cho_YuJin.pptx")
 
-THESIS_TITLE = ("Wavelet-Conditioned Band-Decoupled Spatial Feature Transform "
-                "for Diffusion-Based Video Super-Resolution")
 
 # ── Palette ────────────────────────────────────────────────────────
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-INK = RGBColor(0x12, 0x1E, 0x3D)       # near-black ink for body text
-DEEP = RGBColor(0x15, 0x12, 0x7C)      # template's navy bar — primary identity
-SOFT_BG = RGBColor(0xF6, 0xF4, 0xFB)   # very soft lavender for card fills
-LIGHT_GRAY = RGBColor(0xE5, 0xE5, 0xE5)
-GRAY = RGBColor(0x6B, 0x6B, 0x78)
+INK = RGBColor(0x12, 0x1E, 0x3D)        # near-black ink
 MUTED_INK = RGBColor(0x3D, 0x3D, 0x4A)
+GRAY = RGBColor(0x6B, 0x6B, 0x78)
+LIGHT_GRAY = RGBColor(0xE5, 0xE5, 0xE5)
+SOFT_BG = RGBColor(0xF6, 0xF4, 0xFB)
+DEEP = RGBColor(0x15, 0x12, 0x7C)
+SOFT_BG2 = RGBColor(0xF9, 0xF9, 0xFC)
 
-# Section accent colors — varied but cohesive (each section gets a hue)
+# Section accent colors — distinct hues, cohesive saturation
 SEC = {
-    1: RGBColor(0x2C, 0x55, 0xA8),   # Introduction — blue
-    2: RGBColor(0x0F, 0x86, 0x8E),   # Background — teal
-    3: RGBColor(0x6A, 0x2E, 0xA6),   # Method — purple (primary content)
-    4: RGBColor(0xC5, 0x8A, 0x12),   # Experiments — gold
-    5: RGBColor(0xCB, 0x42, 0x35),   # Results & Ablation — coral red
-    6: RGBColor(0x1F, 0x6E, 0x5C),   # Conclusion — forest green
+    1: RGBColor(0x2C, 0x55, 0xA8),    # Introduction — blue
+    2: RGBColor(0x0F, 0x86, 0x8E),    # Preliminaries — teal
+    3: RGBColor(0x6A, 0x2E, 0xA6),    # Method — purple
+    4: RGBColor(0xC5, 0x8A, 0x12),    # Experiments — gold
+    5: RGBColor(0xCB, 0x42, 0x35),    # Results & Ablation — coral
+    6: RGBColor(0x1F, 0x6E, 0x5C),    # Conclusion — forest
 }
-# Frequency-band colors stay consistent across slides
-HIGH_BAND = RGBColor(0x2C, 0x55, 0xA8)
-LOW_BAND = RGBColor(0xCB, 0x42, 0x35)
+HIGH_BAND = SEC[1]
+LOW_BAND = SEC[5]
 
 
 # ── XML helper ──────────────────────────────────────────────────────
@@ -60,13 +66,8 @@ def _remove_shape(shape):
 
 
 def add_content_slide(prs, section: int):
-    """Add a slide using layout 12 ('16_제목만') and strip the body placeholder.
-
-    Returns: (slide, section_accent_color)
-    """
+    """Add a slide from layout 12 and strip the default body placeholder."""
     slide = prs.slides.add_slide(prs.slide_layouts[12])
-    # Layout 12 brings in a body placeholder (idx=10) with default Korean text.
-    # We do not use it — remove it so the placeholder text never renders.
     for ph in list(slide.placeholders):
         if ph.placeholder_format.idx == 10:
             _remove_shape(ph)
@@ -74,8 +75,11 @@ def add_content_slide(prs, section: int):
 
 
 def set_section_title(slide, section: int, title: str, subtitle: str = ""):
-    """Write the slide title onto the layout's dark navy bar (white text)."""
-    # Locate the title placeholder (idx=1 on layout 12).
+    """White title text on the layout's dark navy bar.
+
+    No section-number badges (per author feedback) — section identity is
+    carried by the accent color of the cards on the slide.
+    """
     ph = None
     for cand in slide.placeholders:
         if cand.placeholder_format.idx == 1:
@@ -88,7 +92,7 @@ def set_section_title(slide, section: int, title: str, subtitle: str = ""):
     tf = ph.text_frame
     tf.clear()
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    tf.margin_left = Inches(0.05)
+    tf.margin_left = Inches(0.1)
     tf.margin_top = Inches(0.0)
     tf.margin_bottom = Inches(0.0)
 
@@ -96,18 +100,6 @@ def set_section_title(slide, section: int, title: str, subtitle: str = ""):
     p.alignment = PP_ALIGN.LEFT
     p.space_before = Pt(0)
     p.space_after = Pt(0)
-
-    badge = p.add_run()
-    badge.text = f"  {section}  "
-    badge.font.size = Pt(13)
-    badge.font.bold = True
-    badge.font.color.rgb = SEC[section]
-    # We can't easily set a per-run highlight; instead add a small filled
-    # rounded rectangle behind the section number visually (see below).
-
-    sep = p.add_run()
-    sep.text = "   "
-    sep.font.size = Pt(20)
 
     main = p.add_run()
     main.text = title
@@ -121,31 +113,6 @@ def set_section_title(slide, section: int, title: str, subtitle: str = ""):
         sub.font.size = Pt(14)
         sub.font.bold = False
         sub.font.color.rgb = RGBColor(0xDD, 0xD8, 0xF0)
-
-    # Section-number badge — a small filled circle to the right of the title bar
-    # (placed at the right edge for a clean visual anchor).
-    badge_box = slide.shapes.add_shape(
-        MSO_SHAPE.OVAL,
-        Inches(12.55), Inches(0.10), Inches(0.55), Inches(0.40),
-    )
-    badge_box.fill.solid()
-    badge_box.fill.fore_color.rgb = SEC[section]
-    badge_box.line.fill.background()
-    badge_box.shadow.inherit = False
-    btf = badge_box.text_frame
-    btf.text = ""
-    btf.margin_left = Inches(0)
-    btf.margin_right = Inches(0)
-    btf.margin_top = Inches(0.02)
-    btf.margin_bottom = Inches(0.0)
-    btf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    bp = btf.paragraphs[0]
-    bp.alignment = PP_ALIGN.CENTER
-    br = bp.add_run()
-    br.text = str(section)
-    br.font.size = Pt(15)
-    br.font.bold = True
-    br.font.color.rgb = WHITE
 
 
 # ── Generic primitives ─────────────────────────────────────────────
@@ -162,7 +129,7 @@ def add_textbox(slide, left, top, width, height, *, anchor=MSO_ANCHOR.TOP):
     return box
 
 
-def add_para(tf, text, *, size=14, bold=False, italic=False, color=INK,
+def add_para(tf, text, *, size=13, bold=False, italic=False, color=INK,
               align=PP_ALIGN.LEFT, space_before=2, space_after=4):
     if not tf.text and not tf.paragraphs[0].runs:
         p = tf.paragraphs[0]
@@ -181,11 +148,11 @@ def add_para(tf, text, *, size=14, bold=False, italic=False, color=INK,
     return p
 
 
-def add_card(slide, left, top, width, height, *, fill=SOFT_BG, line=None,
-              line_width=0.75, radius_corner=True):
+def add_card(slide, left, top, width, height, *, fill=WHITE, line=None,
+              line_width=0.5, rounded=True, shadow=False):
+    style = MSO_SHAPE.ROUNDED_RECTANGLE if rounded else MSO_SHAPE.RECTANGLE
     shape = slide.shapes.add_shape(
-        MSO_SHAPE.ROUNDED_RECTANGLE if radius_corner else MSO_SHAPE.RECTANGLE,
-        Inches(left), Inches(top), Inches(width), Inches(height),
+        style, Inches(left), Inches(top), Inches(width), Inches(height),
     )
     shape.shadow.inherit = False
     if fill is None:
@@ -202,8 +169,7 @@ def add_card(slide, left, top, width, height, *, fill=SOFT_BG, line=None,
     return shape
 
 
-def add_accent_strip(slide, left, top, width, color, *, thickness=0.04):
-    """Thin horizontal accent line under a card header."""
+def add_accent_strip(slide, left, top, width, color, *, thickness=0.045):
     s = slide.shapes.add_shape(
         MSO_SHAPE.RECTANGLE,
         Inches(left), Inches(top), Inches(width), Inches(thickness),
@@ -215,94 +181,31 @@ def add_accent_strip(slide, left, top, width, color, *, thickness=0.04):
     return s
 
 
-def add_numbered_card(slide, left, top, width, height, *, number, header,
-                       lines, accent, header_size=13, body_size=11):
-    """Card with a colored numbered circle, header, and 2-3 short lines."""
-    add_card(slide, left, top, width, height, fill=WHITE, line=LIGHT_GRAY,
-              line_width=0.75)
-    # Number badge — a small filled circle
-    badge_d = 0.45
-    add_card(slide, left + 0.16, top + 0.15, badge_d, badge_d, fill=accent,
-              line=None, radius_corner=False)  # rectangle disabled below
-    # Make it an oval instead
-    _ = None
-    # Replace the rectangle with an oval — easier to just add one fresh.
-    badge_shape = slide.shapes.add_shape(
-        MSO_SHAPE.OVAL,
-        Inches(left + 0.16), Inches(top + 0.15),
-        Inches(badge_d), Inches(badge_d),
+def add_left_stripe(slide, left, top, height, color, *, thickness=0.08):
+    """Vertical accent stripe on the left of a card."""
+    s = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        Inches(left), Inches(top), Inches(thickness), Inches(height),
     )
-    badge_shape.fill.solid()
-    badge_shape.fill.fore_color.rgb = accent
-    badge_shape.line.fill.background()
-    badge_shape.shadow.inherit = False
-    btf = badge_shape.text_frame
-    btf.margin_left = Inches(0)
-    btf.margin_right = Inches(0)
-    btf.margin_top = Inches(0.02)
-    btf.margin_bottom = Inches(0)
-    btf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    bp = btf.paragraphs[0]
-    bp.alignment = PP_ALIGN.CENTER
-    br = bp.add_run()
-    br.text = str(number)
-    br.font.size = Pt(13)
-    br.font.bold = True
-    br.font.color.rgb = WHITE
-    # Remove the rectangle "filler" we made (the first add_card placed an
-    # extra rect at the same spot — remove it).
-    # Iterate shapes and remove the rectangle exactly under the oval.
-    target_l = Inches(left + 0.16)
-    target_t = Inches(top + 0.15)
-    for sh in list(slide.shapes):
-        if sh is badge_shape:
-            continue
-        if (sh.shape_type == 1 and sh.left == target_l and sh.top == target_t
-                and sh.width == Inches(badge_d) and sh.height == Inches(badge_d)):
-            _remove_shape(sh)
-            break
-
-    # Header text
-    hdr = add_textbox(slide, left + 0.78, top + 0.12, width - 0.95, 0.5)
-    add_para(hdr.text_frame, header, size=header_size, bold=True, color=INK)
-    add_accent_strip(slide, left + 0.18, top + 0.66, width - 0.32, accent,
-                      thickness=0.03)
-
-    # Body lines
-    body = add_textbox(slide, left + 0.18, top + 0.78, width - 0.32,
-                       height - 0.88)
-    for line in lines:
-        add_para(body.text_frame, line, size=body_size, color=MUTED_INK,
-                  space_before=2, space_after=4)
-
-
-def add_kpi_card(slide, left, top, width, height, *, label, value, sub,
-                  accent):
-    """Big-number stat card used on the Conclusion slide."""
-    add_card(slide, left, top, width, height, fill=WHITE, line=accent,
-              line_width=1.25)
-    add_accent_strip(slide, left, top, width, accent, thickness=0.06)
-    tb = add_textbox(slide, left + 0.1, top + 0.18, width - 0.2, height - 0.28)
-    add_para(tb.text_frame, label, size=12, bold=True, color=accent,
-              align=PP_ALIGN.CENTER, space_after=2)
-    add_para(tb.text_frame, value, size=34, bold=True, color=INK,
-              align=PP_ALIGN.CENTER, space_before=2, space_after=2)
-    add_para(tb.text_frame, sub, size=11, color=GRAY,
-              align=PP_ALIGN.CENTER, space_before=0, space_after=0)
+    s.fill.solid()
+    s.fill.fore_color.rgb = color
+    s.line.fill.background()
+    s.shadow.inherit = False
+    return s
 
 
 def add_picture_fit(slide, path, left, top, width, height, *, center=True):
     from PIL import Image
     with Image.open(path) as im:
         w_px, h_px = im.size
-    aspect_img = w_px / h_px
-    aspect_box = width / height
-    if aspect_img > aspect_box:
+    ai = w_px / h_px
+    ab = width / height
+    if ai > ab:
         new_w = width
-        new_h = width / aspect_img
+        new_h = width / ai
     else:
         new_h = height
-        new_w = height * aspect_img
+        new_w = height * ai
     if center:
         left = left + (width - new_w) / 2
         top = top + (height - new_h) / 2
@@ -371,10 +274,8 @@ def add_table(slide, left, top, width, height, headers, rows, *,
 
 
 def set_notes(slide, text: str):
-    """Set speaker notes for a slide."""
     notes_tf = slide.notes_slide.notes_text_frame
     notes_tf.clear()
-    # Split into paragraphs on blank lines so the note reads as a script.
     parts = [p.strip() for p in text.strip().split("\n\n") if p.strip()]
     for idx, part in enumerate(parts):
         p = notes_tf.paragraphs[0] if idx == 0 else notes_tf.add_paragraph()
@@ -383,60 +284,86 @@ def set_notes(slide, text: str):
         r.font.size = Pt(11)
 
 
+# ── Re-usable "stripe card" — modern card with thin colored stripe ──
+def stripe_card(slide, left, top, width, height, *, accent, fill=WHITE,
+                 line=LIGHT_GRAY, stripe_top=True, stripe_left=False):
+    """White card with subtle border and a colored accent stripe."""
+    add_card(slide, left, top, width, height, fill=fill,
+              line=line, line_width=0.5)
+    if stripe_top:
+        add_accent_strip(slide, left, top, width, accent, thickness=0.05)
+    if stripe_left:
+        add_left_stripe(slide, left, top, height, accent, thickness=0.07)
+
+
+def big_stat(slide, left, top, width, height, *, label, value, sub,
+             accent):
+    """KPI-style stat block."""
+    stripe_card(slide, left, top, width, height, accent=accent)
+    tb = add_textbox(slide, left + 0.1, top + 0.18, width - 0.2, height - 0.28)
+    add_para(tb.text_frame, label, size=11, bold=True, color=accent,
+              align=PP_ALIGN.CENTER, space_after=2)
+    add_para(tb.text_frame, value, size=30, bold=True, color=INK,
+              align=PP_ALIGN.CENTER, space_before=4, space_after=4)
+    add_para(tb.text_frame, sub, size=10.5, color=GRAY,
+              align=PP_ALIGN.CENTER, space_before=0)
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Cover & contents
 # ──────────────────────────────────────────────────────────────────────────
 def update_cover(prs):
-    """Slide 1 already has cover styling. Replace 'SEMINAR' with thesis title."""
+    """Center the thesis title on the cover slide."""
     slide = prs.slides[0]
     for sh in slide.shapes:
         if not sh.has_text_frame:
             continue
         txt = sh.text_frame.text.strip()
-        if txt == "SEMINAR":
+        # Detect either v2 title or any leftover "SEMINAR"
+        if "Wavelet-Conditioned" in txt or txt == "SEMINAR":
             tf = sh.text_frame
-            # Use a smaller font that fits the long title; preserve placement.
             tf.clear()
             tf.word_wrap = True
-            # Two-line wrap: split at "Spatial Feature Transform"
+            # Centred, two-line title
             line1 = "Wavelet-Conditioned Band-Decoupled Spatial Feature Transform"
             line2 = "for Diffusion-Based Video Super-Resolution"
             p1 = tf.paragraphs[0]
-            p1.alignment = PP_ALIGN.LEFT
+            p1.alignment = PP_ALIGN.CENTER
             r1 = p1.add_run()
             r1.text = line1
-            r1.font.size = Pt(28)
+            r1.font.size = Pt(26)
             r1.font.bold = True
             r1.font.color.rgb = INK
             p2 = tf.add_paragraph()
-            p2.alignment = PP_ALIGN.LEFT
-            p2.space_before = Pt(4)
+            p2.alignment = PP_ALIGN.CENTER
+            p2.space_before = Pt(6)
             r2 = p2.add_run()
             r2.text = line2
-            r2.font.size = Pt(28)
+            r2.font.size = Pt(26)
             r2.font.bold = True
             r2.font.color.rgb = INK
-            # Widen the textbox so the long title fits on two lines instead of
-            # wrapping awkwardly.
-            sh.width = Inches(11.5)
+            # Recenter the textbox across the slide width.
+            sh.left = Inches(0.5)
+            sh.width = Inches(12.33)
             break
 
     set_notes(slide, (
-        "Good morning / afternoon. I am Yu-Jin Cho from the Department of IT "
-        "Engineering at Sookmyung Women's University.\n\n"
-        "Today I will present my Master's thesis: 'Wavelet-Conditioned "
-        "Band-Decoupled Spatial Feature Transform for Diffusion-Based Video "
-        "Super-Resolution.'\n\n"
-        "This work proposes a parameter-efficient frequency-domain "
-        "conditioning module that improves the temporal consistency of "
-        "diffusion-based VSR without retraining the pre-trained backbone."
+        "안녕하십니까. IT공학과 조유진입니다.\n\n"
+        "오늘 발표드릴 석사학위논문의 제목은 'Wavelet-Conditioned "
+        "Band-Decoupled Spatial Feature Transform for Diffusion-Based "
+        "Video Super-Resolution' 입니다.\n\n"
+        "본 연구는 사전학습된 image diffusion model의 generative prior를 "
+        "보존하면서도, 비디오 초해상화(VSR)에서 발생하는 temporal "
+        "flickering 문제를 해결하기 위해, 주파수 도메인 조건화에 기반한 "
+        "parameter-efficient한 어댑테이션 프레임워크를 제안합니다.\n\n"
+        "전체 발표는 약 20분 정도 소요될 예정이며, 발표 후 질의응답 "
+        "시간에 자유롭게 질문 부탁드립니다."
     ))
 
 
 def update_contents(prs):
-    """Rebuild the Contents textbox with numbered sections and subsections."""
+    """Rebuild Contents — section titles in BLACK, subsections in gray."""
     slide = prs.slides[1]
-    # Find the listing textbox.
     target = None
     for sh in slide.shapes:
         if sh.name == "TextBox 5" and sh.has_text_frame:
@@ -445,7 +372,6 @@ def update_contents(prs):
     if target is None:
         return
 
-    # Widen to fit subsections.
     target.left = Inches(4.2)
     target.top = Inches(1.95)
     target.width = Inches(8.5)
@@ -456,17 +382,21 @@ def update_contents(prs):
     tf.word_wrap = True
 
     sections = [
-        ("1.  Introduction",     "Motivation · Related Work · Contributions"),
-        ("2.  Background",       "DT-CWT · Spatial Feature Transform (SFT)"),
-        ("3.  Method",           "Architecture · SubbandBlock · BD-SFT Injection · Training Loss"),
-        ("4.  Experiments",      "Datasets & Setup · Evaluation Metrics"),
+        ("1.  Introduction",
+         "Motivation · Related Work · Contributions"),
+        ("2.  Preliminaries",
+         "VSR · Diffusion · DWT → DT-CWT · SFT"),
+        ("3.  Method",
+         "Architecture · Why DT-CWT · SubbandBlock · BD-SFT · Loss"),
+        ("4.  Experiments",
+         "Datasets & Setup · Evaluation Metrics"),
         ("5.  Results & Ablation",
-                                 "REDS4 · Cross-Dataset · Band Injection Ablation · Discussion"),
-        ("6.  Conclusion",       "Key Findings · Limitations · Future Work"),
+         "REDS4 · Cross-Dataset · Frequency · Band Injection · Discussion"),
+        ("6.  Conclusion",
+         "Limitations · Key Findings · Future Work"),
     ]
 
     for idx, (title, sub) in enumerate(sections):
-        # Title line
         p_t = tf.paragraphs[0] if idx == 0 else tf.add_paragraph()
         p_t.alignment = PP_ALIGN.LEFT
         p_t.space_before = Pt(10 if idx > 0 else 0)
@@ -475,13 +405,12 @@ def update_contents(prs):
         rt.text = title
         rt.font.size = Pt(18)
         rt.font.bold = True
-        rt.font.color.rgb = SEC[idx + 1]
-        # Sub-line
+        rt.font.color.rgb = INK  # ← black per author feedback
+
         p_s = tf.add_paragraph()
         p_s.alignment = PP_ALIGN.LEFT
         p_s.space_before = Pt(0)
         p_s.space_after = Pt(0)
-        # indent the sub-line visually with extra spaces
         rs = p_s.add_run()
         rs.text = "         " + sub
         rs.font.size = Pt(11)
@@ -489,155 +418,271 @@ def update_contents(prs):
         rs.font.color.rgb = GRAY
 
     set_notes(slide, (
-        "The presentation is organised into six sections.\n\n"
-        "Sections 1 and 2 cover the motivation, related work, and the "
-        "theoretical background needed for the proposed method — DT-CWT "
-        "and Spatial Feature Transform.\n\n"
-        "Section 3 details the proposed WC-BD-SFT framework: the Wavelet "
-        "Conditioning Module, the SubbandBlock, the asymmetric BD-SFT "
-        "injection, and the band-decoupled wavelet loss.\n\n"
-        "Sections 4 and 5 present the experiments and quantitative / "
-        "qualitative results, including a controlled comparison against "
-        "the StableVSR baseline and an ablation study.\n\n"
-        "Section 6 summarizes findings, limitations and future work."
+        "발표는 총 여섯 개의 섹션으로 구성됩니다.\n\n"
+        "1장 Introduction에서는 본 연구의 motivation, 관련 연구의 한계, "
+        "그리고 본 논문의 contribution을 소개합니다.\n\n"
+        "2장 Preliminaries에서는 VSR과 diffusion 기반 VSR의 기본 "
+        "formulation, DWT의 한계와 DT-CWT의 동기, 그리고 SFT modulation의 "
+        "기본 개념을 다룹니다.\n\n"
+        "3장 Method에서는 제안하는 WC-BD-SFT 프레임워크 — 즉 Wavelet "
+        "Conditioning Module, SubbandBlock, asymmetric BD-SFT injection, "
+        "그리고 band-decoupled wavelet loss — 를 자세히 설명합니다.\n\n"
+        "4-5장에서는 실험 셋업, REDS4 in-domain 평가, cross-dataset 평가, "
+        "ablation, 그리고 trade-off에 대한 논의를 다루고,\n\n"
+        "마지막 6장에서는 limitation과 future work으로 마무리합니다."
     ))
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Content slide builders — every slide gets speaker notes
-# ──────────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════
+# Section 1 — Introduction
+# ══════════════════════════════════════════════════════════════════════════
 def slide_motivation(prs):
     s, accent = add_content_slide(prs, section=1)
     set_section_title(s, 1, "Motivation",
                        subtitle="Why VSR + Diffusion, and why is it hard?")
 
-    # Three numbered cards across the top half
+    # Three column cards
     cards = [
-        (1, "Demand for HR video",
-         ["Multimedia platforms drive HR video demand.",
-          "VSR recovers HR from LR using spatial + temporal cues."]),
-        (2, "Diffusion priors win on detail",
-         ["CNN/GAN VSR — over-smoothing or unstable training.",
-          "Diffusion priors synthesize realistic textures (SR3, DDPM)."]),
-        (3, "But: temporal flickering",
-         ["Per-frame stochastic denoising → inconsistent HF detail.",
-          "Restored textures shimmer between frames → key bottleneck."]),
+        ("Demand for HR video",
+         ["고품질 HR 영상 콘텐츠 수요 급증.",
+          "VSR — LR 입력의 spatial · temporal 정보를 종합해 HR 복원."]),
+        ("Diffusion priors win on detail",
+         ["CNN/GAN VSR — over-smoothing or training instability.",
+          "Diffusion priors → 사실적인 high-frequency texture (SR3, DDPM)."]),
+        ("But: temporal flickering",
+         ["프레임 독립적 stochastic denoising → HF detail 불일치.",
+          "복원된 texture가 frame 간 shimmer — 핵심 bottleneck."]),
     ]
-    x = 0.55
-    for i, (n, header, lines) in enumerate(cards):
-        add_numbered_card(s, x + i * 4.16, 1.0, 4.0, 2.7, number=n,
-                           header=header, lines=lines, accent=accent)
+    for i, (header, lines) in enumerate(cards):
+        x = 0.55 + i * 4.16
+        stripe_card(s, x, 1.0, 4.0, 2.65, accent=accent)
+        tb = add_textbox(s, x + 0.2, 1.18, 3.68, 2.45)
+        add_para(tb.text_frame, header, size=14, bold=True, color=accent)
+        for line in lines:
+            add_para(tb.text_frame, line, size=11.5, color=MUTED_INK,
+                      space_before=4)
 
-    # Lower band — research question
-    add_card(s, 0.55, 4.0, 12.3, 2.4, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 0.55, 4.0, 12.3, accent, thickness=0.05)
-    tb = add_textbox(s, 0.85, 4.18, 11.7, 2.1)
+    # Research question — vertical accent stripe layout
+    add_card(s, 0.55, 3.95, 12.3, 3.05, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 3.95, 3.05, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 4.15, 11.85, 2.85)
     add_para(tb.text_frame, "Research question",
-              size=14, bold=True, color=accent)
+              size=13, bold=True, color=accent)
     add_para(tb.text_frame,
-              "Can a parameter-efficient module make a pre-trained image "
-              "diffusion model temporally consistent for VSR — without 3D "
-              "attention or full-network fine-tuning?",
-              size=16, bold=True, color=INK, space_before=4)
+              "사전학습된 image diffusion model을 parameter-efficient한 "
+              "방법으로 video에 적응시키면서도, 3D attention이나 "
+              "full-network fine-tuning 없이 temporal consistency를 "
+              "달성할 수 있을까?",
+              size=15, bold=True, color=INK, space_before=8)
     add_para(tb.text_frame,
-              "Key idea — condition the U-Net on shift-stable frequency-domain "
-              "priors, not warped pixels.",
-              size=13, italic=True, color=GRAY, space_before=8)
+              "Key idea — pixel을 warping하는 대신, shift-stable한 "
+              "frequency-domain prior로 U-Net을 conditioning한다.",
+              size=12, italic=True, color=GRAY, space_before=10)
 
     set_notes(s, (
-        "Three motivating points.\n\n"
-        "First, HR video demand keeps growing. VSR aggregates spatial and "
-        "temporal information from low-resolution frames to recover high "
-        "resolution.\n\n"
-        "Second, diffusion-based generative priors outperform CNN and GAN "
-        "approaches in perceptual detail. So a natural question is whether "
-        "we can bring image-trained diffusion priors to video.\n\n"
-        "Third — and this is the bottleneck — applying image diffusion frame "
-        "by frame produces temporal flickering, because high-frequency "
-        "detail is synthesized stochastically and independently per frame.\n\n"
-        "The research question I address is: can a *lightweight* module make "
-        "the pre-trained image diffusion model temporally consistent for "
-        "VSR? My answer is yes — by conditioning on shift-stable "
-        "frequency-domain priors rather than warped pixels or features."
+        "첫 슬라이드 — motivation입니다.\n\n"
+        "세 가지 흐름으로 정리하겠습니다. 첫째, 고해상도 영상 콘텐츠의 "
+        "수요는 계속 증가하고 있습니다. VSR은 저해상도 프레임의 spatial "
+        "정보와 인접 프레임의 temporal 정보를 함께 활용해 HR을 "
+        "복원합니다.\n\n"
+        "둘째, 최근 diffusion-based generative prior가 CNN이나 GAN 기반 "
+        "방법보다 훨씬 사실적인 texture를 합성합니다. 자연스럽게 "
+        "image-trained diffusion prior를 video로 가져오는 시도가 "
+        "활발해졌습니다.\n\n"
+        "셋째, 그러나 결정적인 문제가 있습니다 — 프레임마다 독립적으로 "
+        "stochastic denoising을 수행하기 때문에, 복원되는 high-frequency "
+        "detail이 프레임 간에 일관되지 않습니다. 결과적으로 영상에서 "
+        "texture가 어른거리는 temporal flickering 현상이 발생합니다.\n\n"
+        "본 연구의 research question은 이렇습니다 — 가벼운 모듈만으로, "
+        "사전학습된 image diffusion model을 video에 temporally consistent "
+        "하게 적응시킬 수 있을까? 제 답은 'pixel을 warping하지 말고, "
+        "shift-stable한 frequency-domain prior로 conditioning하자'는 "
+        "것입니다."
     ))
 
 
-def slide_related_work(prs):
+def slide_related_work_paradigms(prs):
     s, accent = add_content_slide(prs, section=1)
-    set_section_title(s, 1, "Related Work", subtitle="VSR & diffusion-based VSR")
+    set_section_title(s, 1, "Related Work · VSR Paradigms",
+                       subtitle="From CNN regression to diffusion priors")
 
-    # Left timeline-style column
-    add_card(s, 0.55, 1.0, 6.0, 5.95, fill=WHITE, line=LIGHT_GRAY)
-    add_accent_strip(s, 0.55, 1.0, 6.0, accent, thickness=0.06)
-    L = add_textbox(s, 0.7, 1.15, 5.7, 5.7)
-    add_para(L.text_frame, "VSR landscape", size=14, bold=True, color=accent)
-
-    # Mini-timeline rows
-    rows = [
-        ("CNN · alignment", "TOFlow · EDVR · BasicVSR/++ · VRT"),
-        ("CNN · real-world", "RealBasicVSR (degradation augmentation)"),
-        ("GAN", "SRGAN / ESRGAN / VideoGigaGAN (2024)"),
-        ("Diffusion · image-prior", "StableVSR (baseline) · DGAF-VSR · MGLD-VSR"),
-        ("Diffusion · video-native", "Upscale-A-Video · Stable Video Diffusion"),
-        ("Recent 2025", "DiffVSR · STAR · DC-VSR · DLoRAL · SeedVR2"),
-    ]
-    for label, names in rows:
+    # Two-column landscape
+    stripe_card(s, 0.55, 1.0, 6.0, 5.95, accent=accent)
+    L = add_textbox(s, 0.85, 1.15, 5.45, 5.7)
+    add_para(L.text_frame, "CNN-based VSR", size=14, bold=True, color=accent)
+    for sub_h, sub_b in [
+        ("Alignment", "TOFlow · RBPN · TDAN · EDVR (NTIRE'19)"),
+        ("Recurrent propagation", "BasicVSR · BasicVSR++ — REDS SOTA"),
+        ("Transformer attention", "VRT · RVRT — long-range temporal"),
+        ("Real-world", "RealBasicVSR — degradation-aware"),
+    ]:
         p = L.text_frame.add_paragraph()
-        p.space_before = Pt(4)
+        p.space_before = Pt(3)
         r1 = p.add_run()
-        r1.text = f"▸  {label}  "
-        r1.font.size = Pt(12)
+        r1.text = "▸  " + sub_h + "  "
+        r1.font.size = Pt(11.5)
         r1.font.bold = True
         r1.font.color.rgb = INK
         r2 = p.add_run()
-        r2.text = names
-        r2.font.size = Pt(11)
+        r2.text = sub_b
+        r2.font.size = Pt(10.5)
         r2.font.color.rgb = GRAY
 
-    # Right — gap analysis
-    add_card(s, 6.85, 1.0, 6.0, 5.95, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 6.85, 1.0, 6.0, accent, thickness=0.06)
-    R = add_textbox(s, 7.05, 1.15, 5.6, 5.7)
-    add_para(R.text_frame, "Closest comparator · StableVSR",
+    add_para(L.text_frame, "한계 — pixel-loss로 인한 over-smoothing,",
+              size=11.5, italic=True, color=accent, space_before=10)
+    add_para(L.text_frame, "alignment 오류 시 visible artifacts.",
+              size=11.5, italic=True, color=accent)
+
+    add_para(L.text_frame, "GAN-based VSR",
+              size=14, bold=True, color=accent, space_before=12)
+    add_para(L.text_frame, "▸  SRGAN · ESRGAN · VideoGigaGAN (CVPR'24)",
+              size=11, color=MUTED_INK)
+    add_para(L.text_frame, "한계 — training instability, 제한된 texture diversity.",
+              size=11.5, italic=True, color=accent, space_before=4)
+
+    # Right column — Diffusion
+    stripe_card(s, 6.85, 1.0, 6.0, 5.95, accent=accent)
+    R = add_textbox(s, 7.15, 1.15, 5.45, 5.7)
+    add_para(R.text_frame, "Diffusion-based VSR — image prior 적응",
               size=14, bold=True, color=accent)
     add_para(R.text_frame,
-              "ControlNet + RAFT-warped x̂₀ of a neighbor frame, "
-              "with bidirectional sampling.",
-              size=12, color=MUTED_INK)
-    add_para(R.text_frame, "Gap we identified", size=13, bold=True,
-              color=INK, space_before=10)
-    for line in [
-        "• Optical-flow warping is fragile under complex motion, occlusion.",
-        "• Standard DWT is shift-variant ⇒ inconsistent inter-frame conditioning.",
-        "• Full-network fine-tuning risks catastrophic forgetting of the prior.",
-    ]:
-        add_para(R.text_frame, line, size=12, color=MUTED_INK,
-                  space_before=2, space_after=2)
-    add_para(R.text_frame, "Our axis — frequency-domain conditioning",
-              size=13, bold=True, color=accent, space_before=10)
+              "▸  StableVSR (ECCV'24) — 본 연구의 직접 baseline.",
+              size=11.5, color=MUTED_INK, space_before=4)
     add_para(R.text_frame,
-              "Shift-stable DT-CWT priors injected into the frozen U-Net via "
-              "asymmetric SFT — orthogonal to feature-warping methods.",
-              size=12, color=MUTED_INK)
+              "      ControlNet + RAFT-warped neighbor x̂₀, "
+              "bidirectional sampling.",
+              size=10.5, color=GRAY)
+    add_para(R.text_frame,
+              "▸  MGLD-VSR — motion-guided latent diffusion.",
+              size=11.5, color=MUTED_INK, space_before=4)
+    add_para(R.text_frame,
+              "▸  DGAF-VSR (CVPR'26) — OGWM + FTCM, feature-domain warping.",
+              size=11.5, color=MUTED_INK, space_before=4)
+
+    add_para(R.text_frame, "Diffusion-based VSR — video-native",
+              size=14, bold=True, color=accent, space_before=10)
+    add_para(R.text_frame, "▸  Upscale-A-Video · Stable Video Diffusion",
+              size=11, color=MUTED_INK)
+    add_para(R.text_frame, "한계 — 학습 비용 / catastrophic forgetting 위험.",
+              size=11.5, italic=True, color=accent, space_before=4)
+
+    add_para(R.text_frame, "Recent 2025 works",
+              size=14, bold=True, color=accent, space_before=10)
+    add_para(R.text_frame,
+              "▸  Robustness — DiffVSR · STAR · DC-VSR",
+              size=11, color=MUTED_INK)
+    add_para(R.text_frame,
+              "▸  Efficiency  — DLoRAL · UltraVSR · SeedVR2",
+              size=11, color=MUTED_INK)
 
     set_notes(s, (
-        "Briefly on the landscape. CNN-based VSR went from explicit flow "
-        "(TOFlow), to deformable alignment (EDVR), to recurrent propagation "
-        "(BasicVSR / BasicVSR++). Transformer variants like VRT, RVRT push "
-        "further on long-range temporal attention.\n\n"
-        "Diffusion-based VSR splits into two directions. The first adapts "
-        "pre-trained image diffusion — StableVSR is the canonical example "
-        "and is the direct baseline of this thesis. DGAF-VSR (CVPR 2026) "
-        "is the most recent comparator, using feature-domain temporal "
-        "guidance via optical-flow warping. The second direction trains "
-        "video-native diffusion from scratch, which is prohibitively "
-        "expensive.\n\n"
-        "The gap I target is the conditioning signal: existing "
-        "parameter-efficient methods still depend on warped pixels or "
-        "features. Optical flow is fragile, and standard DWT-based "
-        "conditioning is shift-variant — both create temporal "
-        "inconsistency. I propose frequency-domain conditioning via "
-        "DT-CWT, which is shift-stable by construction."
+        "관련 연구를 두 축으로 정리했습니다.\n\n"
+        "왼쪽은 CNN과 GAN 기반 VSR 입니다. CNN 계열은 alignment에서 "
+        "출발해 — TOFlow의 explicit optical flow부터, EDVR의 deformable "
+        "convolution, BasicVSR과 BasicVSR++의 bidirectional propagation, "
+        "그리고 VRT와 RVRT 같은 transformer 기반 방법까지 발전했습니다. "
+        "하지만 pixel-wise loss를 사용하기 때문에 결과가 over-smoothing "
+        "되는 한계가 있습니다. GAN은 더 sharp한 texture를 만들지만 "
+        "training instability와 제한된 texture diversity 문제가 "
+        "있습니다.\n\n"
+        "오른쪽은 diffusion 기반입니다. 두 방향이 있는데, 첫 번째는 "
+        "사전학습된 image diffusion prior에 가벼운 temporal module을 "
+        "더하는 방식 — StableVSR가 대표적이고 이 논문의 직접 baseline 입니다. "
+        "ControlNet에 RAFT로 warping한 이웃 프레임의 x̂_0을 넣어주는 "
+        "구조죠. DGAF-VSR는 가장 최근(CVPR 2026) 비교 대상으로, "
+        "feature-domain warping을 통해 temporal guidance를 줍니다.\n\n"
+        "두 번째는 video-native diffusion을 처음부터 학습하는 방식 — "
+        "Stable Video Diffusion이 대표적인데 수십억 파라미터의 비용이 "
+        "듭니다. 2025년에는 robustness 방향(DiffVSR, STAR, DC-VSR)과 "
+        "efficiency 방향(DLoRAL, UltraVSR, SeedVR2)의 연구가 활발히 "
+        "진행되었습니다."
+    ))
+
+
+def slide_related_work_gap(prs):
+    """The 'why' slide — frequency-domain gap → our motivation."""
+    s, accent = add_content_slide(prs, section=1)
+    set_section_title(s, 1, "Related Work · Where the Gap Is",
+                       subtitle="Why frequency-domain conditioning?")
+
+    # Top: frequency-domain prior works
+    stripe_card(s, 0.55, 1.0, 12.3, 2.0, accent=accent)
+    tb = add_textbox(s, 0.85, 1.15, 11.85, 1.85)
+    add_para(tb.text_frame,
+              "Frequency-domain methods exist — but with two key limitations",
+              size=14, bold=True, color=accent)
+    add_para(tb.text_frame,
+              "▸  Image-domain : MWCNN · WaveletSRNet · DWSR — frequency loss "
+              "improves SR sharpness.",
+              size=12, color=MUTED_INK, space_before=4)
+    add_para(tb.text_frame,
+              "▸  Video      : FTVSR — frequency-aware temporal attention for "
+              "compressed VSR.",
+              size=12, color=MUTED_INK, space_before=2)
+    add_para(tb.text_frame,
+              "▸  Diffusion-SR : ResQu (quaternion wavelets) · WaveDiT "
+              "(wavelet-spectrum DiT) — single image only.",
+              size=12, color=MUTED_INK, space_before=2)
+
+    # Middle two cards — the limitations
+    stripe_card(s, 0.55, 3.15, 6.0, 2.0, accent=LOW_BAND, stripe_top=True)
+    tb = add_textbox(s, 0.75, 3.30, 5.7, 1.85)
+    add_para(tb.text_frame, "① Limited to single-image SR",
+              size=12, bold=True, color=LOW_BAND)
+    add_para(tb.text_frame,
+              "Video temporal consistency 문제를 다루지 않음. "
+              "Diffusion 기반 frequency 연구들은 모두 image SR만 대상.",
+              size=11, color=MUTED_INK, space_before=4)
+
+    stripe_card(s, 6.85, 3.15, 6.0, 2.0, accent=LOW_BAND, stripe_top=True)
+    tb = add_textbox(s, 7.05, 3.30, 5.7, 1.85)
+    add_para(tb.text_frame, "② Use shift-variant DWT",
+              size=12, bold=True, color=LOW_BAND)
+    add_para(tb.text_frame,
+              "Critical decimation 때문에 sub-pixel motion에도 wavelet "
+              "coefficient가 크게 흔들림 → video flickering 악화.",
+              size=11, color=MUTED_INK, space_before=4)
+
+    # Bottom — our proposed angle, prominent
+    add_card(s, 0.55, 5.35, 12.3, 1.6, fill=SOFT_BG2, line=accent,
+              line_width=1.0)
+    add_left_stripe(s, 0.55, 5.35, 1.6, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 5.45, 11.85, 1.45)
+    add_para(tb.text_frame, "→  Our motivation",
+              size=12, bold=True, color=accent)
+    add_para(tb.text_frame,
+              "Image SR이 아닌 video VSR을 대상으로, DWT가 아닌 "
+              "near-shift-invariant DT-CWT를 사용해, ",
+              size=13, bold=True, color=INK, space_before=4)
+    add_para(tb.text_frame,
+              "사전학습된 diffusion prior를 freeze한 채 asymmetric "
+              "encoder-decoder injection으로 conditioning한다.",
+              size=13, bold=True, color=INK)
+
+    set_notes(s, (
+        "이 슬라이드가 가장 중요합니다 — 왜 제가 이 알고리즘을 "
+        "설계했는지에 대한 답입니다.\n\n"
+        "Frequency-domain을 활용한 연구는 이미 많이 있습니다. "
+        "Image-domain에서는 MWCNN, WaveletSRNet, DWSR 같은 wavelet "
+        "기반 손실이 super-resolution의 sharpness를 높여줍니다. Video "
+        "쪽에서는 FTVSR가 compressed video를 위한 frequency-aware "
+        "attention을 제안했고, 가장 최근에는 diffusion-SR 분야에서 "
+        "ResQu와 WaveDiT가 wavelet conditioning을 적용했습니다.\n\n"
+        "그런데 두 가지 핵심적인 한계가 있습니다.\n\n"
+        "첫째, diffusion 기반 frequency 연구들은 모두 single-image SR을 "
+        "대상으로 합니다. Video VSR의 temporal consistency 문제는 "
+        "다루지 않습니다.\n\n"
+        "둘째 — 그리고 이게 결정적인 부분인데 — 기존 방법들은 모두 "
+        "standard DWT 또는 그 변형을 씁니다. 그런데 DWT는 critical "
+        "decimation 때문에 shift-variant 합니다. 인접 프레임 사이의 "
+        "sub-pixel motion에도 wavelet coefficient가 크게 흔들리죠. "
+        "이건 오히려 video flickering을 악화시킬 수 있습니다.\n\n"
+        "그래서 제 motivation은 명확합니다 — 첫째, single-image SR이 "
+        "아닌 video VSR을 대상으로 하고, 둘째, DWT가 아닌 near-"
+        "shift-invariant 한 DT-CWT를 사용하고, 셋째, 사전학습된 "
+        "diffusion prior를 freeze한 채 가볍게 conditioning하기 위해 "
+        "asymmetric encoder-decoder injection을 설계합니다."
     ))
 
 
@@ -646,563 +691,697 @@ def slide_contributions(prs):
     set_section_title(s, 1, "Contributions")
 
     contribs = [
-        (1, "WC-BD-SFT framework",
-         ["Frequency-domain adaptation injecting DT-CWT priors into a frozen "
-          "pre-trained diffusion U-Net.",
-          "Asymmetric encoder-decoder injection — HIGH bands → decoder "
-          "(texture), LOW bands → encoder (structure)."]),
-        (2, "Decoupled magnitude-phase processing",
-         ["Trigonometric phase encoding avoids the 2π-wraparound "
-          "discontinuity.",
-          "Frequency Encoder = 6.22 M params (≈3% of ControlNet); "
-          "identity-preserving initialization."]),
-        (3, "Band-decoupled wavelet loss",
-         ["Magnitude-only on HIGH bands; magnitude-weighted angular distance "
-          "on LOW bands.",
-          "Pixel-space frequency supervision alongside latent ε-MSE."]),
-        (4, "Strong empirical gains (REDS4)",
-         ["−62.9 % tLPIPS  (41.11 → 15.25)",
-          "−37.5 % LPIPS   (0.309 → 0.193)",
-          "+103 % HF spectral power retention vs. StableVSR."]),
+        ("WC-BD-SFT framework",
+         ["DT-CWT 기반 frequency-domain conditioning을 frozen pre-trained "
+          "diffusion U-Net에 주입.",
+          "Asymmetric encoder-decoder injection — HIGH → decoder (texture), "
+          "LOW → encoder (structure)."]),
+        ("Decoupled magnitude-phase processing",
+         ["Trigonometric phase encoding — 2π wraparound 불연속 회피.",
+          "Frequency Encoder 6.22 M (≈3% of ControlNet) · "
+          "identity-preserving init."]),
+        ("Band-decoupled wavelet loss",
+         ["HIGH는 magnitude only, LOW는 magnitude-weighted angular distance.",
+          "Latent ε-MSE에 더해 pixel-space frequency supervision."]),
+        ("Strong empirical gains (REDS4)",
+         ["−62.9 % tLPIPS (41.11 → 15.25) · −37.5 % LPIPS",
+          "+103 % high-frequency spectral power retention vs. StableVSR."]),
     ]
-    for i, (n, header, lines) in enumerate(contribs):
+    for i, (header, lines) in enumerate(contribs):
         col = i % 2
         row = i // 2
-        x = 0.55 + col * 6.3
+        x = 0.55 + col * 6.15
         y = 1.0 + row * 2.95
-        add_numbered_card(s, x, y, 6.05, 2.75, number=n, header=header,
-                           lines=lines, accent=accent,
-                           header_size=14, body_size=11)
+        stripe_card(s, x, y, 6.0, 2.75, accent=accent)
+        tb = add_textbox(s, x + 0.2, y + 0.15, 5.65, 2.55)
+        add_para(tb.text_frame, header, size=14, bold=True, color=accent)
+        for line in lines:
+            add_para(tb.text_frame, "▸  " + line, size=11.5,
+                      color=MUTED_INK, space_before=4)
 
     set_notes(s, (
-        "Four contributions.\n\n"
-        "First — the WC-BD-SFT framework itself. The novelty is asymmetric "
-        "band-decoupled injection: high-frequency wavelet bands go to the "
-        "U-Net decoder where textures are synthesized; low-frequency bands "
-        "go to the encoder where structural abstraction happens.\n\n"
-        "Second — magnitude-phase decoupling. Phase is encoded as (sin, cos) "
-        "to be continuous across ±π. The resulting Frequency Encoder is "
-        "only 6.22 M parameters and is initialized to preserve the "
-        "pre-trained prior at step zero.\n\n"
-        "Third — the band-decoupled wavelet loss. HIGH bands are supervised "
-        "in magnitude only so the network can synthesize freely; LOW bands "
-        "include a magnitude-weighted phase term for structural fidelity.\n\n"
-        "Fourth — the empirical headline. Under matched REDS-only training, "
-        "we cut tLPIPS by 63 %, LPIPS by 37.5 %, and more than double the "
-        "high-frequency spectral retention versus StableVSR."
+        "본 연구의 contribution은 네 가지입니다.\n\n"
+        "첫째 — WC-BD-SFT 프레임워크 자체입니다. 핵심은 asymmetric "
+        "band-decoupled injection — 고주파 wavelet band는 decoder로 보내 "
+        "texture 합성에 기여하고, 저주파 band는 encoder로 보내 structural "
+        "feature 추출에 기여하도록 분리한 점입니다.\n\n"
+        "둘째 — magnitude와 phase를 분리해 처리합니다. Phase는 sin과 "
+        "cos pair로 인코딩해 ±π 경계에서의 wraparound 불연속을 "
+        "회피합니다. 전체 Frequency Encoder는 6.22 M 파라미터로 "
+        "ControlNet의 약 3% 수준이며, identity-preserving "
+        "initialization으로 학습 시작점에서 pre-trained prior를 "
+        "그대로 보존합니다.\n\n"
+        "셋째 — band-decoupled wavelet loss를 새롭게 도입했습니다. "
+        "HIGH band는 magnitude만 supervise하여 자유로운 texture 합성을 "
+        "허용하고, LOW band는 magnitude-weighted angular distance로 "
+        "구조의 phase 정확도까지 강제합니다.\n\n"
+        "넷째 — 실험 결과입니다. Matched REDS-only 학습 조건에서, "
+        "tLPIPS는 63% 감소, LPIPS는 37.5% 감소, 그리고 high-frequency "
+        "spectral power retention은 StableVSR 대비 두 배 이상 향상됩니다."
     ))
 
 
-def slide_background_dtcwt(prs):
+# ══════════════════════════════════════════════════════════════════════════
+# Section 2 — Preliminaries (NEW)
+# ══════════════════════════════════════════════════════════════════════════
+def slide_prelim_vsr_diffusion(prs):
     s, accent = add_content_slide(prs, section=2)
-    set_section_title(s, 2, "Dual-Tree Complex Wavelet Transform",
-                       subtitle="Why DT-CWT — not DWT or Fourier")
+    set_section_title(s, 2, "Preliminaries · VSR & Diffusion",
+                       subtitle="Formulation and the StableVSR pipeline")
 
-    # Image left
+    # Left — VSR formulation
+    stripe_card(s, 0.55, 1.0, 6.0, 5.95, accent=accent)
+    L = add_textbox(s, 0.85, 1.15, 5.45, 5.7)
+    add_para(L.text_frame, "Video Super-Resolution", size=14, bold=True,
+              color=accent)
+    add_para(L.text_frame, "LR sequence → HR sequence with BIx4 degradation",
+              size=12, color=MUTED_INK, space_before=2)
+    add_para(L.text_frame,
+              "$I^{LR} = \\mathcal{D}_{bicubic}(I^{HR};\\, s=4)$",
+              size=12, italic=True, color=GRAY, space_before=4)
+
+    add_para(L.text_frame, "Two core components",
+              size=12.5, bold=True, color=INK, space_before=12)
+    add_para(L.text_frame, "▸  Temporal alignment — flow / deformable / recurrent",
+              size=11.5, color=MUTED_INK, space_before=2)
+    add_para(L.text_frame, "▸  Temporal aggregation — fuse aligned features",
+              size=11.5, color=MUTED_INK, space_before=2)
+
+    add_para(L.text_frame, "Perception–distortion trade-off",
+              size=12.5, bold=True, color=INK, space_before=12)
+    add_para(L.text_frame,
+              "Blau & Michaeli (2018) — pixel fidelity와 perceptual "
+              "quality를 동시에 만족할 수 없음. 본 연구는 perceptual 극단을 "
+              "추구합니다.",
+              size=11.5, color=MUTED_INK, space_before=4)
+
+    # Right — Diffusion VSR + StableVSR baseline
+    stripe_card(s, 6.85, 1.0, 6.0, 5.95, accent=accent)
+    R = add_textbox(s, 7.15, 1.15, 5.45, 5.7)
+    add_para(R.text_frame, "Latent diffusion model (LDM)",
+              size=14, bold=True, color=accent)
+    add_para(R.text_frame,
+              "Forward — clean latent에 점진적으로 noise 추가.",
+              size=11.5, color=MUTED_INK, space_before=4)
+    add_para(R.text_frame,
+              "Reverse — U-Net이 noise 예측, $\\epsilon$-MSE로 학습.",
+              size=11.5, color=MUTED_INK, space_before=2)
+    add_para(R.text_frame,
+              "Stable Diffusion v2.1 — text-to-image LDM, 본 연구의 backbone.",
+              size=11.5, color=MUTED_INK, space_before=2)
+
+    add_para(R.text_frame, "StableVSR baseline (Rota et al., ECCV'24)",
+              size=14, bold=True, color=accent, space_before=12)
+    add_para(R.text_frame,
+              "▸  ControlNet으로 SD를 VSR에 adapt — Temporal Conditioning "
+              "Module (TCM).",
+              size=11.5, color=MUTED_INK, space_before=4)
+    add_para(R.text_frame,
+              "▸  매 step마다 인접 프레임의 x̂₀를 RAFT optical flow로 "
+              "현재 프레임에 warping → ControlNet input.",
+              size=11.5, color=MUTED_INK, space_before=2)
+    add_para(R.text_frame,
+              "▸  Frame-wise Bidirectional Sampling — denoising step마다 "
+              "forward / backward 방향 교대.",
+              size=11.5, color=MUTED_INK, space_before=2)
+    add_para(R.text_frame,
+              "→  본 연구는 이 scaffold를 그대로 사용하고 WCM만 추가.",
+              size=11.5, italic=True, color=accent, space_before=6)
+
+    set_notes(s, (
+        "Preliminaries 첫 번째 슬라이드입니다. VSR과 diffusion-based "
+        "VSR의 기본 개념을 정리합니다.\n\n"
+        "왼쪽 — VSR은 LR 시퀀스에서 HR 시퀀스를 복원하는 task입니다. "
+        "보통 bicubic ×4 downsampling으로 LR을 만들고, 두 핵심 "
+        "컴포넌트가 temporal alignment와 temporal aggregation 입니다. "
+        "한 가지 중요한 이론적 배경 — Blau와 Michaeli의 perception-"
+        "distortion trade-off가 있습니다. Pixel fidelity와 perceptual "
+        "quality를 동시에 최대화할 수 없다는 것이죠. 본 연구는 의도적으로 "
+        "perceptual quality 극단을 추구합니다.\n\n"
+        "오른쪽 — latent diffusion model 입니다. Forward 과정에서 latent에 "
+        "noise를 점진적으로 추가하고, U-Net이 이 noise를 예측하도록 "
+        "epsilon-MSE로 학습합니다. 본 연구는 Stable Diffusion v2.1을 "
+        "backbone으로 사용합니다.\n\n"
+        "StableVSR는 본 연구의 직접 baseline 입니다. ControlNet으로 SD를 "
+        "VSR에 적응시키는 구조이고, Temporal Conditioning Module(TCM)이 "
+        "핵심 입니다. 매 denoising step마다 인접 프레임의 x_hat_0 예측을 "
+        "RAFT optical flow로 현재 프레임에 warping해 ControlNet input으로 "
+        "사용합니다. 또한 Frame-wise Bidirectional Sampling으로 forward "
+        "방향과 backward 방향을 번갈아 적용해 temporal consistency를 "
+        "강화합니다. 본 연구는 이 scaffold를 변경 없이 그대로 사용하고, "
+        "Wavelet Conditioning Module만 추가합니다."
+    ))
+
+
+def slide_prelim_dwt_dtcwt(prs):
+    s, accent = add_content_slide(prs, section=2)
+    set_section_title(s, 2, "Preliminaries · DWT → DT-CWT",
+                       subtitle="From shift-variant to shift-invariant")
+
+    # Left — DWT limitations
+    stripe_card(s, 0.55, 1.0, 6.0, 3.6, accent=LOW_BAND, stripe_top=True)
+    L = add_textbox(s, 0.75, 1.15, 5.55, 3.4)
+    add_para(L.text_frame, "Discrete Wavelet Transform (DWT)",
+              size=14, bold=True, color=LOW_BAND)
+    add_para(L.text_frame,
+              "✗  Shift-variance — critical decimation 때문에 sub-pixel "
+              "shift에도 coefficient가 크게 흔들림.",
+              size=12, color=MUTED_INK, space_before=6)
+    add_para(L.text_frame,
+              "✗  3 directional subbands per scale — horizontal · "
+              "vertical · diagonal만.",
+              size=12, color=MUTED_INK, space_before=2)
+    add_para(L.text_frame,
+              "✗  Real-valued — phase 정보 미포함.",
+              size=12, color=MUTED_INK, space_before=2)
+
+    # Right — DT-CWT
+    stripe_card(s, 6.85, 1.0, 6.0, 3.6, accent=HIGH_BAND, stripe_top=True)
+    R = add_textbox(s, 7.05, 1.15, 5.55, 3.4)
+    add_para(R.text_frame, "Dual-Tree Complex Wavelet (DT-CWT)",
+              size=14, bold=True, color=HIGH_BAND)
+    add_para(R.text_frame,
+              "✓  Near shift-invariance — 두 개의 parallel tree (Hilbert "
+              "transform pair).",
+              size=12, color=MUTED_INK, space_before=6)
+    add_para(R.text_frame,
+              "✓  6 directional subbands per scale — ±15°, ±45°, ±75°.",
+              size=12, color=MUTED_INK, space_before=2)
+    add_para(R.text_frame,
+              "✓  Complex coefficients → (magnitude, phase) 분해.",
+              size=12, color=MUTED_INK, space_before=2)
+
+    # Bottom — empirical proof image
     add_picture_fit(s, FIG_DIR / "dtcwt_shift_zoom_v4-1.png",
-                     0.55, 1.0, 6.6, 5.4)
-    cap = add_textbox(s, 0.55, 6.45, 6.6, 0.45)
+                     0.55, 4.85, 12.3, 2.0)
+    cap = add_textbox(s, 0.55, 6.85, 12.3, 0.20)
     add_para(cap.text_frame,
-              "DT-CWT magnitudes 5.09× more stable than DWT under sub-pixel shifts.",
+              "Empirically — DT-CWT magnitudes 5.09× more stable than DWT "
+              "under sub-pixel shifts (σ = 0.019 vs. 0.087).",
               size=10, italic=True, color=GRAY, align=PP_ALIGN.CENTER)
 
-    # Right — three property cards
-    props = [
-        ("Near shift-invariance",
-         "Magnitudes stable under sub-pixel shifts → temporally consistent "
-         "conditioning between adjacent frames."),
-        ("6 directional subbands",
-         "±15° / ±45° / ±75° at each scale — 2× DWT's directional "
-         "resolution; preserves edge orientation."),
-        ("Magnitude + phase",
-         "Complex coefficients factor into shift-stable magnitude (texture) "
-         "and localized phase (structure)."),
-    ]
-    for i, (h, body) in enumerate(props):
-        y = 1.0 + i * 1.85
-        add_card(s, 7.3, y, 5.55, 1.7, fill=WHITE, line=LIGHT_GRAY)
-        add_accent_strip(s, 7.3, y, 5.55, accent, thickness=0.05)
-        tb = add_textbox(s, 7.45, y + 0.13, 5.3, 1.55)
-        add_para(tb.text_frame, h, size=13, bold=True, color=accent)
-        add_para(tb.text_frame, body, size=11.5, color=MUTED_INK,
-                  space_before=4)
-
     set_notes(s, (
-        "Why DT-CWT? Three properties matter for diffusion-based VSR.\n\n"
-        "First, near shift-invariance. Magnitudes of DT-CWT coefficients are "
-        "approximately invariant under sub-pixel translations — unlike "
-        "standard DWT, whose coefficients oscillate under critical "
-        "decimation. The figure on the left empirically shows DT-CWT "
-        "magnitudes are about 5 times more stable than DWT under "
-        "sub-pixel shifts.\n\n"
-        "Second, six directional subbands per scale instead of three — this "
-        "preserves edge orientation that DWT would collapse onto its three "
-        "axes.\n\n"
-        "Third, complex coefficients give us an explicit magnitude-phase "
-        "factorization. Magnitude is shift-stable energy — great for "
-        "textures. Phase is localized — great for structure. We exploit "
-        "this asymmetry in the SubbandBlock."
+        "Preliminaries 두 번째 — DWT의 한계와 DT-CWT의 동기 입니다.\n\n"
+        "왼쪽 — 표준 DWT의 세 가지 한계 입니다. 첫째, critical decimation "
+        "때문에 shift-variant 합니다. 입력이 sub-pixel만큼만 움직여도 "
+        "wavelet coefficient가 크게 흔들립니다. Video VSR 입장에서는 "
+        "치명적인 단점입니다. 둘째, scale 당 directional subband가 "
+        "horizontal, vertical, diagonal 셋 뿐입니다. Texture의 "
+        "다양한 방향성을 잘 표현하지 못합니다. 셋째, real-valued라서 "
+        "phase 정보가 없습니다.\n\n"
+        "오른쪽 — DT-CWT는 이 세 가지를 모두 해결합니다. 첫째, Hilbert "
+        "transform pair를 이루는 두 개의 parallel DWT tree로 구성되어 "
+        "있어 magnitude가 near shift-invariant 합니다. 둘째, scale 당 "
+        "방향 subband가 ±15°, ±45°, ±75° 의 여섯 방향으로 두 배입니다. "
+        "셋째, complex-valued 라서 magnitude와 phase로 분해할 수 "
+        "있습니다.\n\n"
+        "아래 그림은 sub-pixel shift 실험 결과 입니다. DT-CWT magnitude의 "
+        "per-pixel 표준편차가 DWT보다 5.09배 더 안정적입니다. 이 "
+        "shift-stability가 본 연구에서 DT-CWT를 선택한 핵심 이유 입니다."
     ))
 
 
-def slide_background_sft(prs):
+def slide_prelim_sft(prs):
     s, accent = add_content_slide(prs, section=2)
-    set_section_title(s, 2, "Spatial Feature Transform (SFT)")
+    set_section_title(s, 2, "Preliminaries · Spatial Feature Transform",
+                       subtitle="Spatially-varying affine modulation")
 
-    # Equation block
-    add_card(s, 0.55, 1.0, 12.3, 1.3, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 0.55, 1.0, 12.3, accent, thickness=0.06)
-    tb = add_textbox(s, 0.55, 1.18, 12.3, 1.05, anchor=MSO_ANCHOR.MIDDLE)
-    add_para(tb.text_frame, "Spatially-varying affine modulation",
-              size=12, bold=True, color=accent, align=PP_ALIGN.CENTER)
+    # Equation block — clean centered
+    add_card(s, 2.5, 1.0, 8.4, 1.3, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 2.5, 1.0, 1.3, accent, thickness=0.08)
+    tb = add_textbox(s, 2.5, 1.10, 8.4, 1.1, anchor=MSO_ANCHOR.MIDDLE)
+    add_para(tb.text_frame, "Spatial Feature Transform (Wang et al., CVPR 2018)",
+              size=11, bold=True, color=accent, align=PP_ALIGN.CENTER)
     add_para(tb.text_frame, "X′  =  X ⊙ γ  +  β",
-              size=26, bold=True, color=INK,
-              align=PP_ALIGN.CENTER, space_before=2)
+              size=26, bold=True, color=INK, align=PP_ALIGN.CENTER,
+              space_before=4)
+    add_para(tb.text_frame, "feature를 channel-wise 가 아닌 spatial-wise로 "
+              "affine modulation.",
+              size=10.5, italic=True, color=GRAY, align=PP_ALIGN.CENTER,
+              space_before=4)
 
-    # Comparison cards
+    # Comparison
     cards = [
-        ("AdaIN", "Globally uniform modulation. Loses spatial detail."),
-        ("Cross-attention", "Spatially varying — but O(N²) cost in feature size."),
-        ("SFT (ours)", "Spatially varying + linear-time. Ideal for wavelet conditioning."),
+        ("AdaIN", "Globally uniform.\nSpatial detail 손실.", GRAY),
+        ("Cross-attention", "Spatially varying.\nO(N²) cost.", GRAY),
+        ("SFT (ours)", "Spatially varying + linear-time.\n"
+                       "Wavelet conditioning에 최적.", accent),
     ]
-    for i, (h, body) in enumerate(cards):
+    for i, (h, body, col) in enumerate(cards):
         x = 0.55 + i * 4.16
-        add_card(s, x, 2.6, 4.0, 1.65, fill=WHITE, line=LIGHT_GRAY)
-        add_accent_strip(s, x, 2.6, 4.0, accent, thickness=0.05)
-        col = accent if i == 2 else GRAY
-        tb = add_textbox(s, x + 0.13, 2.74, 3.75, 1.45)
+        stripe_card(s, x, 2.65, 4.0, 1.7, accent=col)
+        tb = add_textbox(s, x + 0.18, 2.78, 3.65, 1.55)
+        add_para(tb.text_frame, h, size=13, bold=True, color=col)
+        add_para(tb.text_frame, body, size=11, color=MUTED_INK, space_before=4)
+
+    # Why SFT for our task
+    add_card(s, 0.55, 4.6, 12.3, 2.35, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 4.6, 2.35, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 4.78, 11.85, 2.15)
+    add_para(tb.text_frame, "Why SFT fits this work",
+              size=13, bold=True, color=accent)
+    add_para(tb.text_frame,
+              "▸  Wavelet coefficient는 본질적으로 spatial하게 분포 — "
+              "spatial-wise modulation이 자연스러운 매칭.",
+              size=12, color=MUTED_INK, space_before=4)
+    add_para(tb.text_frame,
+              "▸  Cross-attention 대비 가벼움 — H × W 크기의 latent에서 "
+              "quadratic cost 회피.",
+              size=12, color=MUTED_INK, space_before=2)
+    add_para(tb.text_frame,
+              "▸  Identity-preserving init (γ=1, β=0)이 자연스럽게 정의됨 — "
+              "학습 시작 시 baseline 동작 보존.",
+              size=12, color=MUTED_INK, space_before=2)
+
+    set_notes(s, (
+        "Preliminaries 마지막 — Spatial Feature Transform 입니다.\n\n"
+        "SFT는 Wang et al.이 CVPR 2018에서 image SR을 위해 제안한 "
+        "modulation 기법 입니다. Feature map X에 대해 channel-wise가 "
+        "아닌 spatial-wise로 affine 변환을 적용합니다 — γ로 곱하고 "
+        "β를 더하는 것이죠.\n\n"
+        "다른 modulation 기법과 비교하면, AdaIN은 globally uniform이라 "
+        "spatial detail을 잃고, cross-attention은 spatially varying이지만 "
+        "spatial size에 대해 quadratic cost가 듭니다. SFT는 spatially "
+        "varying이면서 linear time입니다.\n\n"
+        "SFT가 본 연구에 잘 맞는 이유는 세 가지 입니다. 첫째, wavelet "
+        "coefficient 자체가 본질적으로 spatial한 분포를 갖기 때문에 "
+        "spatial-wise modulation이 자연스러운 매칭입니다. 둘째, "
+        "cross-attention보다 훨씬 가벼워서 latent의 H×W가 커도 "
+        "감당 가능합니다. 셋째, identity-preserving initialization을 "
+        "자연스럽게 정의할 수 있어서 — γ를 1, β를 0으로 두면 — 학습 "
+        "시작 시점에 사전학습된 baseline이 그대로 보존됩니다."
+    ))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Section 3 — Method
+# ══════════════════════════════════════════════════════════════════════════
+def slide_why_dtcwt(prs):
+    s, accent = add_content_slide(prs, section=3)
+    set_section_title(s, 3, "Method · Why DT-CWT, not DWT or Fourier",
+                       subtitle="Three reasons from the thesis")
+
+    reasons = [
+        ("① Near shift-invariance",
+         "Magnitudes ≈ stable under sub-pixel translations.\n"
+         "DWT는 critical decimation으로 frame 간 inconsistent conditioning.\n"
+         "→  shift-stable conditioning is essential for video.",
+         HIGH_BAND),
+        ("② Six directional subbands",
+         "±15°, ±45°, ±75° at each scale (2× DWT's 3 subbands).\n"
+         "Hair / foliage / fabric의 임의 방향 edge를 보존.\n"
+         "→  decoder가 oriented HF detail을 합성하기에 적합.",
+         accent),
+        ("③ Complex coeffs → magnitude · phase",
+         "Magnitude: shift-stable energy descriptor → texture.\n"
+         "Phase: precise spatial localization → structure.\n"
+         "→  band-decoupled SFT pathway에 직접 대응.",
+         LOW_BAND),
+    ]
+    for i, (h, body, col) in enumerate(reasons):
+        y = 1.0 + i * 1.85
+        stripe_card(s, 0.55, y, 12.3, 1.7, accent=col, stripe_left=True,
+                     stripe_top=False)
+        tb = add_textbox(s, 0.85, y + 0.12, 12.0, 1.55)
         add_para(tb.text_frame, h, size=14, bold=True, color=col)
-        add_para(tb.text_frame, body, size=11, color=MUTED_INK,
-                  space_before=4)
+        for line in body.split("\n"):
+            add_para(tb.text_frame, line, size=11.5, color=MUTED_INK,
+                      space_before=2, space_after=2)
 
-    # BD-SFT preview
-    add_card(s, 0.55, 4.55, 12.3, 2.4, fill=SOFT_BG, line=DEEP, line_width=1.0)
-    add_accent_strip(s, 0.55, 4.55, 12.3, DEEP, thickness=0.06)
-    tb = add_textbox(s, 0.55, 4.75, 12.3, 2.2, anchor=MSO_ANCHOR.MIDDLE)
-    add_para(tb.text_frame, "Band-Decoupled SFT — preview",
-              size=13, bold=True, color=DEEP, align=PP_ALIGN.CENTER)
-
-    # Two side-by-side mini-blocks
-    add_card(s, 1.5, 5.25, 4.8, 1.5, fill=WHITE, line=HIGH_BAND, line_width=1.0)
-    tb1 = add_textbox(s, 1.65, 5.4, 4.5, 1.3)
-    add_para(tb1.text_frame, "(γ_ℋ, β_ℋ)  →  up_blocks[1]",
-              size=13, bold=True, color=HIGH_BAND, align=PP_ALIGN.CENTER)
-    add_para(tb1.text_frame, "HIGH bands modulate decoder",
-              size=11, color=MUTED_INK, align=PP_ALIGN.CENTER, space_before=4)
-    add_para(tb1.text_frame, "→ textural detail synthesis",
-              size=10.5, italic=True, color=GRAY, align=PP_ALIGN.CENTER)
-
-    add_card(s, 7.05, 5.25, 4.8, 1.5, fill=WHITE, line=LOW_BAND, line_width=1.0)
-    tb2 = add_textbox(s, 7.2, 5.4, 4.5, 1.3)
-    add_para(tb2.text_frame, "(γ_ℒ, β_ℒ)  →  down_blocks[1]",
-              size=13, bold=True, color=LOW_BAND, align=PP_ALIGN.CENTER)
-    add_para(tb2.text_frame, "LOW bands modulate encoder",
-              size=11, color=MUTED_INK, align=PP_ALIGN.CENTER, space_before=4)
-    add_para(tb2.text_frame, "→ structural consolidation",
+    # Bottom — Fourier comparison
+    add_card(s, 0.55, 6.7, 12.3, 0.45, fill=None, line=None)
+    tb = add_textbox(s, 0.55, 6.65, 12.3, 0.35)
+    add_para(tb.text_frame,
+              "vs. Fourier — globally-supported basis ⇒ single edge alters "
+              "the entire spectrum; cannot vary spatially. DT-CWT combines "
+              "Fourier's mag-phase factorization with wavelet's spatial "
+              "localization.",
               size=10.5, italic=True, color=GRAY, align=PP_ALIGN.CENTER)
 
     set_notes(s, (
-        "SFT — Spatial Feature Transform — is the modulation primitive we "
-        "use. It performs spatially varying affine modulation of "
-        "intermediate features: X' = X ⊙ γ + β.\n\n"
-        "It was originally proposed for image super-resolution. The reason "
-        "I chose it over AdaIN or cross-attention: AdaIN is globally "
-        "uniform and would lose spatial detail; cross-attention is "
-        "spatially varying but quadratic in spatial size; SFT is both "
-        "spatially varying and linear-time, which is a perfect fit for "
-        "multi-scale wavelet conditioning that is itself "
-        "spatially-localized.\n\n"
-        "Preview of the band-decoupled scheme — HIGH-band SFT is injected "
-        "at the decoder (up_blocks[1]) for texture synthesis; LOW-band SFT "
-        "is injected at the encoder (down_blocks[1]) for structural "
-        "consolidation. I'll detail the reasoning in the Method section."
+        "Method 섹션의 첫 슬라이드 — 왜 DT-CWT를 선택했는지에 대한 "
+        "논문의 3가지 핵심 이유를 그대로 따라 설명합니다.\n\n"
+        "첫째, near shift-invariance 입니다. DT-CWT magnitude는 sub-pixel "
+        "translation에 대해 approximately stable합니다. 반면 DWT는 "
+        "critical decimation 때문에 같은 shift에서도 coefficient가 크게 "
+        "변합니다. Video VSR에서 인접 프레임은 sub-pixel motion으로 "
+        "차이가 나므로, shift-variant한 표현은 frame 간 inconsistent "
+        "conditioning을 만듭니다.\n\n"
+        "둘째, six directional subbands per scale 입니다. DT-CWT는 각 "
+        "scale에서 ±15°, ±45°, ±75° 의 6개 방향 subband를 제공합니다. "
+        "DWT의 3개에 비해 두 배 풍부하죠. 머리카락, 잎사귀, 직물 같은 "
+        "자연 texture의 임의 방향 edge를 잘 보존합니다. Decoder가 "
+        "directionally coherent한 high-frequency detail을 합성하는 데 "
+        "이 정보가 필수적입니다.\n\n"
+        "셋째, complex coefficient의 magnitude-phase 분해 입니다. "
+        "Magnitude는 shift-stable한 energy descriptor — texture 정보. "
+        "Phase는 spatial localization — structure 정보. 이 분해가 본 "
+        "연구의 band-decoupled SFT pathway에 직접 대응됩니다.\n\n"
+        "Fourier transform도 complex coefficient를 주지만 globally-"
+        "supported basis라서 spatial하게 conditioning을 변화시킬 수 "
+        "없습니다. DT-CWT는 Fourier의 mag-phase factorization과 "
+        "wavelet의 spatial localization을 동시에 갖춥니다."
     ))
 
 
 def slide_band_partition(prs):
     s, accent = add_content_slide(prs, section=3)
-    set_section_title(s, 3, "Multi-Scale Decomposition",
-                       subtitle="DT-CWT → band partitioning")
+    set_section_title(s, 3, "Method · Multi-Scale Decomposition",
+                       subtitle="DT-CWT → band partitioning at j=2 / j=3")
 
-    # Equation header
-    add_card(s, 0.55, 1.0, 12.3, 0.85, fill=SOFT_BG, line=accent, line_width=1.0)
-    tb = add_textbox(s, 0.55, 1.1, 12.3, 0.7, anchor=MSO_ANCHOR.MIDDLE)
-    add_para(tb.text_frame,
-              "DT-CWT_{J=4}(I^{LR}_t) =  ( I^{LP}_t ,  {C^{(j,d)}_t}_{j=1..4, d=1..6} )      "
-              "with C ∈ ℂ^{H/2ʲ × W/2ʲ × 3}",
-              size=14, bold=True, color=INK, align=PP_ALIGN.CENTER)
+    # The matplotlib diagram is the centerpiece
+    add_picture_fit(s, FIG_DIR / "band_pyramid.png",
+                     0.55, 1.0, 12.3, 3.4)
 
-    # Two band cards
-    add_card(s, 0.55, 2.1, 6.0, 2.4, fill=WHITE, line=HIGH_BAND, line_width=1.2)
-    add_accent_strip(s, 0.55, 2.1, 6.0, HIGH_BAND, thickness=0.06)
-    tb = add_textbox(s, 0.7, 2.28, 5.7, 2.2)
-    add_para(tb.text_frame, "HIGH band  ℋ = {j=1, j=2}",
-              size=14, bold=True, color=HIGH_BAND)
-    add_para(tb.text_frame, "[1/8, 1/2] cyc/px  ·  fine texture & sharp edges",
-              size=11, color=MUTED_INK, space_before=4)
-    add_para(tb.text_frame, "→  injected at up_blocks[1]  (decoder)",
-              size=12, bold=True, color=INK, space_before=8)
-
-    add_card(s, 6.85, 2.1, 6.0, 2.4, fill=WHITE, line=LOW_BAND, line_width=1.2)
-    add_accent_strip(s, 6.85, 2.1, 6.0, LOW_BAND, thickness=0.06)
-    tb = add_textbox(s, 7.0, 2.28, 5.7, 2.2)
-    add_para(tb.text_frame, "LOW band  ℒ = {j=3, j=4}",
-              size=14, bold=True, color=LOW_BAND)
-    add_para(tb.text_frame, "[0, 1/8] cyc/px  ·  coarse structure",
-              size=11, color=MUTED_INK, space_before=4)
-    add_para(tb.text_frame, "→  injected at down_blocks[1]  (encoder)",
-              size=12, bold=True, color=INK, space_before=8)
-
-    # Bottom — rationale
-    add_card(s, 0.55, 4.7, 12.3, 2.25, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 0.55, 4.7, 12.3, accent, thickness=0.06)
-    tb = add_textbox(s, 0.85, 4.9, 11.7, 2.05)
-    add_para(tb.text_frame, "Why this 2:2 split?",
+    # Rationale strip
+    add_card(s, 0.55, 4.65, 12.3, 2.3, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 4.65, 2.3, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 4.80, 11.85, 2.10)
+    add_para(tb.text_frame, "Why this 2 : 2 split at j=2 / j=3?",
               size=13, bold=True, color=accent)
     add_para(tb.text_frame,
-              "▸  Spectral — clean split at the LR spectrum midpoint; "
-              "each pathway specializes on a non-overlapping range.",
-              size=12, color=MUTED_INK, space_before=4)
+              "▸  Spectral — LR 신호 spectrum을 정확히 절반으로 분리 "
+              "(texture 상위, structure 하위). 각 SFT pathway가 "
+              "non-overlapping range에 특화.",
+              size=11.5, color=MUTED_INK, space_before=4)
     add_para(tb.text_frame,
-              "▸  Architectural — 2 scales × 256 ch = 512 ch  matches the "
-              "U-Net's block_out_channels[1] = 512.",
-              size=12, color=MUTED_INK, space_before=2)
+              "▸  Architectural — 2 scales × 256 ch = 512 ch ⇒ U-Net의 "
+              "block_out_channels[1] = 512와 정확히 일치, 추가 projection 불필요.",
+              size=11.5, color=MUTED_INK, space_before=2)
     add_para(tb.text_frame,
-              "▸  J = 4 — j=4 spatial size H/16 × W/16 fits cleanly atop "
-              "SD-VAE's 8× and U-Net's 2× downsampling.",
-              size=12, color=MUTED_INK, space_before=2)
+              "▸  J = 4 — j=4 subband의 H/16 × W/16 size가 SD-VAE 8× 와 "
+              "U-Net 2× 다운샘플링 위에서 자연스럽게 정렬.",
+              size=11.5, color=MUTED_INK, space_before=2)
 
     set_notes(s, (
-        "I decompose each LR frame with a 4-level DT-CWT. Each scale yields "
-        "six complex-valued directional subbands.\n\n"
-        "The four scales are partitioned at the boundary between j=2 and "
-        "j=3. Scales 1 and 2 — covering normalized frequencies from 1/8 to "
-        "1/2 cycles per pixel — form the HIGH band; they capture fine "
-        "texture and sharp edges. Scales 3 and 4 — from 0 to 1/8 — form the "
-        "LOW band; they capture coarse structure.\n\n"
-        "Three reasons for this 2:2 split. Spectral — it cleanly splits the "
-        "LR signal in half. Architectural — two scales × 256 channels "
-        "concatenates to 512 channels, exactly matching the U-Net's "
-        "block_out_channels[1] at down_blocks[1] and up_blocks[1]. And "
-        "J=4 is the largest number of levels whose smallest subband still "
-        "fits cleanly into the U-Net feature resolution given SD-VAE's "
-        "8× and U-Net's 2× downsampling."
+        "본 연구의 multi-scale decomposition과 band partitioning 입니다.\n\n"
+        "위쪽 그림 — LR 입력 프레임을 4-level DT-CWT로 분해하면 4개의 "
+        "scale이 나옵니다. 각 scale은 6개의 directional subband를 "
+        "갖습니다. 이 4개 scale을 j=2와 j=3 사이에서 두 그룹으로 "
+        "나눕니다.\n\n"
+        "HIGH band는 j=1과 j=2 — normalized frequency 1/8 ~ 1/2 cyc/px, "
+        "fine texture와 sharp edge에 해당합니다. 이건 up_blocks[1] 즉 "
+        "decoder로 들어갑니다. LOW band는 j=3과 j=4 — 0 ~ 1/8 cyc/px, "
+        "coarse structure에 해당합니다. 이건 down_blocks[1] 즉 encoder로 "
+        "들어갑니다. 별도로 real-valued lowpass component(LP)는 wavelet "
+        "loss에서 reference로 사용됩니다.\n\n"
+        "왜 이렇게 2대 2로 나눴는지 세 가지 이유가 있습니다.\n\n"
+        "첫째, spectral 관점 — LR 신호의 주파수 spectrum을 정확히 "
+        "절반으로 나눠 texture 상위와 structure 하위로 분리할 수 "
+        "있습니다. 각 SFT pathway가 non-overlapping range에 특화됩니다.\n\n"
+        "둘째, architectural 관점 — 2개 scale의 SFT output을 channel-wise "
+        "concat하면 2 × 256 = 512 채널이 됩니다. 이건 Stable Diffusion "
+        "U-Net의 block_out_channels[1]과 정확히 일치해서, 추가적인 "
+        "channel projection 없이 그대로 modulation 가능합니다.\n\n"
+        "셋째, J=4를 선택한 이유 — j=4 subband의 spatial size H/16 × "
+        "W/16이 SD-VAE의 8× 다운샘플링과 U-Net의 2× 다운샘플링과 "
+        "자연스럽게 정렬됩니다."
     ))
 
 
 def slide_subbandblock_detail(prs):
     s, accent = add_content_slide(prs, section=3)
-    set_section_title(s, 3, "SubbandBlock",
-                       subtitle="Magnitude-phase decoupling")
+    set_section_title(s, 3, "Method · SubbandBlock",
+                       subtitle="Magnitude / phase decoupled pipeline")
 
-    # Left — diagram-ish vertical pipeline
-    add_card(s, 0.55, 1.0, 5.8, 5.9, fill=WHITE, line=LIGHT_GRAY)
-    add_accent_strip(s, 0.55, 1.0, 5.8, accent, thickness=0.06)
-    tb = add_textbox(s, 0.7, 1.18, 5.5, 5.6)
-    add_para(tb.text_frame, "Operator pipeline", size=14, bold=True, color=accent)
-    add_para(tb.text_frame, "Magnitude branch  ℰ_M",
-              size=12, bold=True, color=INK, space_before=8)
-    add_para(tb.text_frame,
-              "DWConv₃ₓ₃ → SiLU → SA → Conv₁ₓ₁     (18 → 64 ch)",
-              size=11, color=MUTED_INK)
-    add_para(tb.text_frame, "Phase encoding branch  ℰ_φ",
-              size=12, bold=True, color=INK, space_before=8)
-    add_para(tb.text_frame, "𝒯(φ) = (sin φ, cos φ)   ⇒   wraparound-safe",
-              size=11, color=MUTED_INK)
-    add_para(tb.text_frame,
-              "DWConv₃ₓ₃ → SiLU → SA → Conv₁ₓ₁     (36 → 128 ch)",
-              size=11, color=MUTED_INK)
-    add_para(tb.text_frame, "Recombination",
-              size=12, bold=True, color=INK, space_before=8)
-    add_para(tb.text_frame,
-              "e_re = e_M ⊙ e_cos,   e_im = e_M ⊙ e_sin",
-              size=11, color=MUTED_INK)
-    add_para(tb.text_frame, "[e_M ‖ e_re ‖ e_im]   →   3 × 64 = 192 ch",
-              size=11, color=MUTED_INK)
-    add_para(tb.text_frame, "SFT heads", size=12, bold=True, color=INK,
-              space_before=8)
-    add_para(tb.text_frame, "Conv₃ → SiLU → Conv₃   →   (γ⁽ʲ⁾, β⁽ʲ⁾) @ 256 ch each",
-              size=11, color=MUTED_INK)
+    add_picture_fit(s, FIG_DIR / "mag_phase_pipe.png",
+                     0.55, 0.95, 12.3, 3.3)
 
-    # Right top — key insight callout
-    add_card(s, 6.55, 1.0, 6.3, 2.7, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 6.55, 1.0, 6.3, accent, thickness=0.06)
-    tb = add_textbox(s, 6.75, 1.18, 5.95, 2.5)
-    add_para(tb.text_frame, "Why decouple magnitude & phase?",
+    # Two callouts below
+    stripe_card(s, 0.55, 4.45, 6.0, 2.55, accent=accent)
+    L = add_textbox(s, 0.75, 4.60, 5.6, 2.40)
+    add_para(L.text_frame, "Trigonometric phase encoding",
               size=13, bold=True, color=accent)
-    add_para(tb.text_frame,
-              "▸  Magnitude — non-negative, shift-stable, energy descriptor.",
-              size=11.5, color=MUTED_INK, space_before=4)
-    add_para(tb.text_frame,
-              "▸  Phase — 2π-periodic, localized, discontinuous at ±π.",
+    add_para(L.text_frame, "𝒯(φ) = (sin φ, cos φ)",
+              size=14, bold=True, color=LOW_BAND, space_before=4)
+    add_para(L.text_frame, "= (b / (M+ε),  a / (M+ε))",
               size=11.5, color=MUTED_INK, space_before=2)
-    add_para(tb.text_frame,
-              "Mixing them in one branch dilutes their roles. Decoupling "
-              "lets each branch learn its native statistics.",
-              size=11.5, color=MUTED_INK, space_before=4)
+    add_para(L.text_frame, "▸  ±π 경계에서 continuous · gradient stable",
+              size=11, color=MUTED_INK, space_before=6)
+    add_para(L.text_frame, "▸  ε = 1e-8 — flat region에서 M → 0 안정화",
+              size=11, color=MUTED_INK)
 
-    # Right bottom — parameter callout
-    add_card(s, 6.55, 3.85, 6.3, 3.05, fill=WHITE, line=DEEP, line_width=1.0)
-    add_accent_strip(s, 6.55, 3.85, 6.3, DEEP, thickness=0.06)
-    tb = add_textbox(s, 6.7, 4.05, 6.0, 2.9, anchor=MSO_ANCHOR.MIDDLE)
-    add_para(tb.text_frame, "Frequency Encoder", size=13, bold=True, color=DEEP,
-              align=PP_ALIGN.CENTER)
-    add_para(tb.text_frame, "6.22 M  params", size=30, bold=True, color=INK,
-              align=PP_ALIGN.CENTER, space_before=4)
-    add_para(tb.text_frame, "≈ 3 % of the 208 M ControlNet",
-              size=12, italic=True, color=GRAY, align=PP_ALIGN.CENTER,
+    stripe_card(s, 6.85, 4.45, 6.0, 2.55, accent=accent)
+    R = add_textbox(s, 7.05, 4.60, 5.6, 2.40)
+    add_para(R.text_frame, "Frequency Encoder",
+              size=13, bold=True, color=accent)
+    add_para(R.text_frame, "6.22 M params",
+              size=24, bold=True, color=INK,
+              align=PP_ALIGN.CENTER, space_before=8)
+    add_para(R.text_frame, "≈ 3 % of the 208 M ControlNet",
+              size=11, italic=True, color=GRAY, align=PP_ALIGN.CENTER,
               space_before=2)
-    add_para(tb.text_frame,
-              "Identity-preserving init  —  γ ≡ 1, β ≡ 0 at step 0",
-              size=11.5, color=MUTED_INK, align=PP_ALIGN.CENTER,
-              space_before=8)
+    add_para(R.text_frame,
+              "Identity-preserving init — γ ≡ 1, β ≡ 0 at step 0.",
+              size=11, color=MUTED_INK, align=PP_ALIGN.CENTER,
+              space_before=10)
 
     set_notes(s, (
-        "The SubbandBlock processes one DT-CWT scale.\n\n"
-        "Two parallel branches. The magnitude branch takes 18 input channels "
-        "(6 directions × 3 colors). The phase branch first encodes phase "
-        "as a (sin φ, cos φ) pair — that's 36 channels — and that "
-        "trigonometric encoding makes the representation continuous across "
-        "the ±π wraparound.\n\n"
-        "Why decouple? Magnitude is non-negative shift-stable energy. Phase "
-        "is 2π-periodic and discontinuous. Mixing them at the first conv "
-        "would force the network to learn both statistics simultaneously, "
-        "diluting each. Decoupling lets each branch specialize.\n\n"
-        "After recombination — multiplying magnitude with cos and sin to "
-        "reconstruct complex-valued embeddings — we concatenate "
-        "[magnitude ‖ real ‖ imag] for 192 channels, then two SFT heads "
-        "output γ and β at 256 channels each.\n\n"
-        "The whole Frequency Encoder is 6.22 million parameters — about 3 "
-        "percent of the ControlNet backbone. It's initialised so the "
-        "U-Net behaves identically to the original at step zero, then "
-        "gradually learns frequency modulation."
+        "SubbandBlock의 내부 구조 입니다. 하나의 DT-CWT scale을 입력으로 "
+        "받아 (γ, β) modulation parameter를 생성합니다.\n\n"
+        "위쪽 그림 — 처리 과정은 세 단계입니다. 첫째, complex coefficient "
+        "C = a + ib에서 magnitude와 phase를 추출합니다. Magnitude branch "
+        "에는 18 채널 (6 방향 × 3 RGB)이 들어가고, phase는 sin과 cos "
+        "pair로 인코딩된 36 채널이 phase branch에 들어갑니다. 두 branch는 "
+        "각각 DWConv → SiLU → Spatial Attention → Conv-1×1 의 동일한 "
+        "operator를 통과합니다.\n\n"
+        "둘째, recombination 단계 — magnitude를 cos과 sin과 element-wise "
+        "곱해 complex 임베딩의 real부와 imaginary부를 만듭니다. "
+        "이는 polar-to-Cartesian 관계 R·e^{iφ} = R·cos φ + i·R·sin φ 를 "
+        "embedding space에서 그대로 반영한 것입니다.\n\n"
+        "왼쪽 아래 — phase는 그대로 처리하면 ±π에서 wraparound 불연속이 "
+        "생깁니다. φ = π - δ 와 φ = -π + δ 는 거의 같은 각도인데 raw "
+        "값으로는 2π 차이가 납니다. 이 불연속은 convolution layer에 "
+        "치명적입니다. 그래서 sin, cos pair로 인코딩해 unit circle 위에 "
+        "올리면 continuous한 표현이 됩니다. 또 magnitude가 0에 가까운 "
+        "flat region에서는 ε = 1e-8을 더해 수치 안정성을 보장합니다.\n\n"
+        "오른쪽 아래 — 전체 Frequency Encoder는 6.22 M 파라미터로 "
+        "ControlNet의 약 3% 입니다. Identity-preserving initialization — "
+        "두 번째 conv의 weight를 0으로, γ의 bias를 1로, β의 bias를 0으로 "
+        "초기화 — 덕분에 학습 시작 시점에 wrapped U-Net이 원래 U-Net과 "
+        "동일하게 동작합니다."
     ))
 
 
 def slide_bdsft_injection(prs):
     s, accent = add_content_slide(prs, section=3)
-    set_section_title(s, 3, "BD-SFT Injection",
+    set_section_title(s, 3, "Method · BD-SFT Injection",
                        subtitle="Asymmetric encoder-decoder modulation")
 
-    # Equation strip
-    add_card(s, 0.55, 1.0, 12.3, 0.85, fill=SOFT_BG, line=accent, line_width=1.0)
-    tb = add_textbox(s, 0.55, 1.1, 12.3, 0.7, anchor=MSO_ANCHOR.MIDDLE)
-    add_para(tb.text_frame,
-              "γ_ℋ = [γ⁽¹⁾ ‖ γ⁽²⁾]  → up_blocks[1]      "
-              "γ_ℒ = [γ⁽³⁾ ‖ γ⁽⁴⁾]  → down_blocks[1]      (each: 512 ch)",
-              size=14, bold=True, color=INK, align=PP_ALIGN.CENTER)
+    # The U-Net injection figure
+    add_picture_fit(s, FIG_DIR / "unet_injection.png",
+                     0.55, 0.95, 12.3, 3.5)
 
     # Three rationale cards
     cards = [
-        ("Architectural alignment",
-         ["block_out_channels = [256, 512, 512, 1024].",
-          "down_blocks[1] / up_blocks[1] both = 512 channels.",
-          "Matches (γ, β) ∈ ℝ^{512 × h × w} by construction."]),
-        ("Functional separation",
-         ["U-Net encoder suppresses HF; consolidates structure (FreeU, 2024).",
-          "Decoder reintroduces HF via upsampling + skip fusion.",
-          "Align LOW ↔ encoder, HIGH ↔ decoder."]),
-        ("Conservative design",
-         ["One injection per band — minimal parameter overhead.",
-          "Clean identity initialisation at both injection points.",
-          "γ, β are bilinear-aligned to (h, w) when needed."]),
+        ("① Architectural alignment",
+         "block_out_channels = [256, 512, 512, 1024].\n"
+         "down_blocks[1] = up_blocks[1] = 512 ch — matches (γ, β) by "
+         "construction."),
+        ("② Functional separation",
+         "FreeU (Si et al., 2024) — encoder suppresses HF & consolidates "
+         "structure; decoder reintroduces HF via upsampling.\n"
+         "→  align LOW ↔ encoder, HIGH ↔ decoder."),
+        ("③ Conservative design",
+         "Single injection per band — minimal overhead.\n"
+         "Clean identity init at both injection points."),
     ]
-    for i, (h, lines) in enumerate(cards):
+    for i, (h, body) in enumerate(cards):
         x = 0.55 + i * 4.16
-        add_card(s, x, 2.1, 4.0, 4.85, fill=WHITE, line=LIGHT_GRAY)
-        add_accent_strip(s, x, 2.1, 4.0, accent, thickness=0.06)
-        # Big number label
-        nbox = slide_number_box(s, x + 0.18, 2.28, 0.55, 0.55,
-                                 number=i + 1, color=accent)
-        tb = add_textbox(s, x + 0.85, 2.28, 3.05, 0.6)
-        add_para(tb.text_frame, h, size=13, bold=True, color=accent)
-        body = add_textbox(s, x + 0.18, 2.95, 3.72, 3.9)
-        for line in lines:
-            add_para(body.text_frame, "▸  " + line, size=11.5,
-                      color=MUTED_INK, space_before=4, space_after=2)
+        stripe_card(s, x, 4.65, 4.0, 2.35, accent=accent)
+        tb = add_textbox(s, x + 0.18, 4.78, 3.65, 2.20)
+        add_para(tb.text_frame, h, size=12.5, bold=True, color=accent)
+        for line in body.split("\n"):
+            add_para(tb.text_frame, line, size=10.5, color=MUTED_INK,
+                      space_before=3, space_after=2)
 
     set_notes(s, (
-        "The injection scheme is asymmetric. HIGH-band modulation tensors — "
-        "obtained by concatenating γ from scales 1 and 2 — go into "
-        "up_blocks[1], the decoder. LOW-band tensors go into "
-        "down_blocks[1], the encoder. Each has exactly 512 channels.\n\n"
-        "Three reasons. First, architectural alignment — both U-Net blocks "
-        "have 512 channels, so the modulation tensors match without "
-        "extra projection.\n\n"
-        "Second, functional separation. The FreeU analysis showed the "
-        "encoder progressively suppresses high frequencies while "
-        "consolidating coarse structure, and the decoder reintroduces "
-        "high-frequency detail via upsampling and skip-fusion. So we "
-        "align LOW with encoder and HIGH with decoder — each band "
-        "augments the stage where it has the most direct impact.\n\n"
-        "Third, conservative design — one injection per band keeps "
-        "parameter overhead low and preserves the clean identity "
-        "initialization at both points."
+        "BD-SFT Injection scheme — band-decoupled spatial feature "
+        "transform이라는 이름의 핵심 아이디어 입니다.\n\n"
+        "위쪽 그림 — Stable Diffusion U-Net에 두 개의 injection point가 "
+        "있습니다. 빨간색으로 표시된 down_blocks[1]은 encoder의 두 번째 "
+        "block으로, LOW band SFT가 들어갑니다. 파란색으로 표시된 "
+        "up_blocks[1]은 decoder의 두 번째 block으로, HIGH band SFT가 "
+        "들어갑니다.\n\n"
+        "왜 이렇게 asymmetric하게 배치했는지 세 가지 근거가 있습니다.\n\n"
+        "첫째, architectural alignment — Stable Diffusion U-Net의 "
+        "block_out_channels는 [256, 512, 512, 1024] 입니다. "
+        "down_blocks[1]과 up_blocks[1]이 둘 다 512 채널 이고, 이건 "
+        "본 연구의 (γ, β) 출력 차원과 정확히 일치합니다. 다른 block을 "
+        "쓰면 추가적인 channel projection이 필요합니다.\n\n"
+        "둘째, functional separation — FreeU 연구 (Si et al. 2024)가 "
+        "밝힌 바, diffusion U-Net의 encoder는 high-frequency를 "
+        "suppress하고 coarse structure를 consolidate합니다. 반면 "
+        "decoder는 upsampling과 skip-connection fusion을 통해 "
+        "high-frequency detail을 재도입합니다. 본 연구의 injection은 "
+        "이 functional role과 정확히 align됩니다 — LOW band는 encoder의 "
+        "structural abstraction을 강화하고, HIGH band는 decoder의 "
+        "detail synthesis를 강화합니다.\n\n"
+        "셋째, conservative design — band 당 injection을 하나로 "
+        "제한함으로써 parameter overhead를 최소화하고, 두 injection point "
+        "모두에서 clean한 identity initialization을 유지할 수 있습니다."
     ))
-
-
-def slide_number_box(slide, left, top, w, h, *, number, color):
-    """Small numbered circle for accent."""
-    badge = slide.shapes.add_shape(
-        MSO_SHAPE.OVAL,
-        Inches(left), Inches(top), Inches(w), Inches(h),
-    )
-    badge.fill.solid()
-    badge.fill.fore_color.rgb = color
-    badge.line.fill.background()
-    badge.shadow.inherit = False
-    tf = badge.text_frame
-    tf.margin_left = Inches(0)
-    tf.margin_right = Inches(0)
-    tf.margin_top = Inches(0.02)
-    tf.margin_bottom = Inches(0)
-    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    p = tf.paragraphs[0]
-    p.alignment = PP_ALIGN.CENTER
-    r = p.add_run()
-    r.text = str(number)
-    r.font.size = Pt(15)
-    r.font.bold = True
-    r.font.color.rgb = WHITE
-    return badge
 
 
 def slide_training_loss(prs):
     s, accent = add_content_slide(prs, section=3)
-    set_section_title(s, 3, "Training Loss",
+    set_section_title(s, 3, "Method · Training Loss",
                        subtitle="Band-decoupled wavelet supervision")
 
     # Total loss
-    add_card(s, 0.55, 1.0, 12.3, 1.05, fill=SOFT_BG, line=accent, line_width=1.0)
-    tb = add_textbox(s, 0.55, 1.13, 12.3, 0.85, anchor=MSO_ANCHOR.MIDDLE)
+    add_card(s, 0.55, 1.0, 12.3, 1.0, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 1.0, 1.0, accent, thickness=0.08)
+    tb = add_textbox(s, 0.55, 1.10, 12.3, 0.85, anchor=MSO_ANCHOR.MIDDLE)
     add_para(tb.text_frame, "Total objective",
-              size=11, bold=True, color=accent, align=PP_ALIGN.CENTER)
+              size=10.5, bold=True, color=accent, align=PP_ALIGN.CENTER)
     add_para(tb.text_frame,
               "ℒ_total  =  ℒ_MSE  +  λ_wav · 𝟙[t_step mod K = 0] · ℒ_wav      "
               "(λ_wav = 1.0,  K = 4)",
-              size=16, bold=True, color=INK, align=PP_ALIGN.CENTER,
-              space_before=2)
+              size=15, bold=True, color=INK, align=PP_ALIGN.CENTER,
+              space_before=4)
 
-    # Wavelet loss card
-    add_card(s, 0.55, 2.25, 12.3, 2.0, fill=WHITE, line=DEEP, line_width=1.0)
-    add_accent_strip(s, 0.55, 2.25, 12.3, DEEP, thickness=0.06)
-    tb = add_textbox(s, 0.55, 2.45, 12.3, 1.8, anchor=MSO_ANCHOR.MIDDLE)
+    # Wavelet loss equations
+    add_card(s, 0.55, 2.2, 12.3, 1.85, fill=WHITE, line=DEEP, line_width=0.8)
+    add_accent_strip(s, 0.55, 2.2, 12.3, DEEP, thickness=0.05)
+    tb = add_textbox(s, 0.55, 2.35, 12.3, 1.7, anchor=MSO_ANCHOR.MIDDLE)
     add_para(tb.text_frame, "Band-decoupled wavelet loss",
-              size=12, bold=True, color=DEEP, align=PP_ALIGN.CENTER)
+              size=11, bold=True, color=DEEP, align=PP_ALIGN.CENTER)
     add_para(tb.text_frame,
               "ℒ_wav  =  λ_ℋ Σ_{j∈ℋ} ‖|Ĉ⁽ʲ⁾| − |C⁽ʲ⁾|‖₁   +   "
               "λ_ℒ Σ_{j∈ℒ} ℒⱼ^{mp}   +   λ_LP ‖Î^{LP} − I^{LP}‖₁",
-              size=13.5, bold=True, color=INK, align=PP_ALIGN.CENTER,
+              size=13, bold=True, color=INK, align=PP_ALIGN.CENTER,
               space_before=4)
     add_para(tb.text_frame,
-              "ℒⱼ^{mp}  =  ‖|Ĉ⁽ʲ⁾| − |C⁽ʲ⁾|‖₁  +  𝔼[ |C⁽ʲ⁾| · (1 − cos(φ̂ − φ)) ]",
-              size=12, italic=True, color=MUTED_INK, align=PP_ALIGN.CENTER,
+              "ℒⱼ^{mp}  =  ‖|Ĉ⁽ʲ⁾| − |C⁽ʲ⁾|‖₁  +  𝔼[ |C⁽ʲ⁾| · "
+              "(1 − cos(φ̂ − φ)) ]",
+              size=11.5, italic=True, color=MUTED_INK, align=PP_ALIGN.CENTER,
               space_before=2)
 
-    # Two pillars
-    add_card(s, 0.55, 4.45, 6.0, 2.5, fill=WHITE, line=HIGH_BAND, line_width=1.0)
-    add_accent_strip(s, 0.55, 4.45, 6.0, HIGH_BAND, thickness=0.06)
-    tb = add_textbox(s, 0.75, 4.63, 5.6, 2.3)
+    # Asymmetric supervision
+    stripe_card(s, 0.55, 4.25, 6.0, 2.7, accent=HIGH_BAND, stripe_left=True,
+                 stripe_top=False)
+    tb = add_textbox(s, 0.85, 4.40, 5.5, 2.55)
     add_para(tb.text_frame, "HIGH band — magnitude only",
               size=13, bold=True, color=HIGH_BAND)
     add_para(tb.text_frame,
-              "Texture is supervised loosely so the network can synthesize "
-              "freely without phase-matching constraints.",
-              size=11.5, color=MUTED_INK, space_before=4)
+              "Texture를 loosely supervise — network가 phase에 "
+              "constraint 없이 자유롭게 detail을 합성하도록.",
+              size=11, color=MUTED_INK, space_before=4)
     add_para(tb.text_frame, "λ_ℋ = 0.1  ·  soft texture prior",
               size=12, bold=True, color=INK, space_before=8)
 
-    add_card(s, 6.85, 4.45, 6.0, 2.5, fill=WHITE, line=LOW_BAND, line_width=1.0)
-    add_accent_strip(s, 6.85, 4.45, 6.0, LOW_BAND, thickness=0.06)
-    tb = add_textbox(s, 7.05, 4.63, 5.6, 2.3)
-    add_para(tb.text_frame, "LOW band — mag-weighted angular distance",
+    stripe_card(s, 6.85, 4.25, 6.0, 2.7, accent=LOW_BAND, stripe_left=True,
+                 stripe_top=False)
+    tb = add_textbox(s, 7.15, 4.40, 5.5, 2.55)
+    add_para(tb.text_frame, "LOW band — magnitude-weighted angular distance",
               size=13, bold=True, color=LOW_BAND)
     add_para(tb.text_frame,
-              "Structural phase is penalised in proportion to local energy. "
-              "Wraparound-safe by construction.",
-              size=11.5, color=MUTED_INK, space_before=4)
-    add_para(tb.text_frame, "λ_ℒ = λ_LP = 1.0  ·  strict structural match",
+              "Structural phase 오차를 |C| 비례로 강력하게 supervise — "
+              "high-energy 영역의 phase가 더 중요.",
+              size=11, color=MUTED_INK, space_before=4)
+    add_para(tb.text_frame, "λ_ℒ = λ_LP = 1.0  ·  strict match",
               size=12, bold=True, color=INK, space_before=8)
 
     set_notes(s, (
-        "The total objective combines two terms. The standard latent ε-MSE, "
-        "and a band-decoupled wavelet loss applied every K=4 steps in "
-        "pixel space. The K=4 schedule keeps VAE-decoding overhead "
-        "manageable.\n\n"
-        "The wavelet loss decomposes by band. HIGH bands are supervised in "
-        "magnitude only — we don't pin down phase, so the network can "
-        "synthesize textures freely. LOW bands include a "
-        "magnitude-weighted angular distance term — 1 minus cosine of the "
-        "phase difference — weighted by the ground-truth magnitude so "
-        "phase fidelity matters most where structural energy is high. "
-        "This is wraparound-safe.\n\n"
-        "Weights: λ_H = 0.1 — a soft texture prior. λ_L and λ_LP = 1.0 — "
-        "strict structural matching. We empirically found that λ_H = 1.0 "
-        "produces visible HF artifacts, while λ_H near zero degrades "
-        "perceptual quality. 0.1 was the stable choice."
+        "마지막 method 슬라이드 — training loss 입니다.\n\n"
+        "전체 objective는 두 term의 합 입니다. 첫째는 latent space의 "
+        "표준 ε-MSE — diffusion model 학습의 기본입니다. 둘째는 "
+        "band-decoupled wavelet loss를 K=4 step마다 적용합니다. K=4로 "
+        "한 이유는 wavelet loss를 계산하려면 VAE로 latent를 pixel space "
+        "로 decode해야 하는데 이게 비용이 크기 때문에, 매 step이 아닌 "
+        "주기적으로 적용하는 절충입니다.\n\n"
+        "Wavelet loss는 세 부분의 합 입니다. HIGH band 항은 magnitude만 "
+        "L1, LOW band 항은 magnitude L1과 phase term의 합인 ℒⱼ^mp, 그리고 "
+        "lowpass 항은 LP component의 L1 입니다.\n\n"
+        "Phase term — 1 - cos(Δφ) — 는 directional statistics에서 표준 "
+        "angular distance이고 wraparound-safe합니다. Ground truth "
+        "magnitude |C|로 가중치를 주는 이유는, structural energy가 높은 "
+        "영역에서는 phase fidelity가 중요하고 flat 영역에서는 phase가 "
+        "수학적으로 undefined에 가깝기 때문에 supervision 가중치를 "
+        "낮추는 게 맞습니다.\n\n"
+        "Asymmetric supervision은 의도된 설계 입니다. HIGH band는 texture "
+        "이므로 magnitude만 강제하고 phase는 자유롭게 두어 network가 "
+        "실감 나는 detail을 만들 수 있게 합니다. LOW band는 structure "
+        "이므로 phase까지 supervise해 정확한 구조 매칭을 강제합니다.\n\n"
+        "Loss weight는 λ_H = 0.1, λ_L = λ_LP = 1.0 입니다. λ_H = 1.0으로 "
+        "두면 HF artifact가 보이는 경향이 있었고, 0에 가까우면 perceptual "
+        "quality가 떨어졌습니다. 0.1이 안정적인 절충 값이었습니다."
     ))
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# Section 4 — Experiments
+# ══════════════════════════════════════════════════════════════════════════
 def slide_experiments_setup(prs):
     s, accent = add_content_slide(prs, section=4)
     set_section_title(s, 4, "Datasets & Training Setup")
 
-    # Datasets table
+    # Top — datasets table
     rows = [
-        ("REDS (train split)", "Training",            "236",       "720p"),
-        ("REDS4",              "In-domain eval",      "4",         "720p"),
-        ("Vid4",               "OOD eval",            "4",         "SD"),
-        ("UDM10",              "OOD eval",            "10",        "720p"),
-        ("SPMCS",              "OOD eval",            "30",        "SD"),
+        ("REDS (train split)", "Training",           "236",       "720p"),
+        ("REDS4",              "In-domain eval",     "4 (000/011/015/020)", "720p"),
+        ("Vid4",               "OOD eval",           "4",         "SD"),
+        ("UDM10",              "OOD eval",           "10",        "720p"),
+        ("SPMCS",              "OOD eval",           "30",        "SD"),
     ]
-    add_table(s, 0.55, 1.0, 7.0, 2.2,
+    add_table(s, 0.55, 1.0, 7.4, 2.4,
               headers=["Dataset", "Role", "Seqs", "Resolution"],
-              rows=rows, header_size=11, body_size=11)
+              rows=rows, header_size=11, body_size=10.5)
 
-    # Training config table
+    # Right — training config
     rows2 = [
         ("Backbone (frozen)", "SD v2.1 U-Net 472 M  +  VAE 55 M"),
-        ("Trainable",         "ControlNet 208 M  +  Freq. Encoder 6.22 M"),
-        ("Optimizer",         "AdamW · lr = 1e-4 · 20 000 iters"),
-        ("Batch / window",    "B = 8 · T_win = 3 · 64²→256² patches"),
-        ("DT-CWT",            "biort=near_sym_a · qshift=qshift_a · J = 4"),
+        ("Trainable",         "ControlNet 208 M  +  Freq.Encoder 6.22 M"),
+        ("Optimizer",         "AdamW · lr 1e-4 · 20k iters"),
+        ("Batch / window",    "B=8 · T_win=3 · 64² → 256² patches"),
+        ("DT-CWT",            "near_sym_a / qshift_a, J=4"),
         ("Inference",         "50 DDPM · Bidirectional Sampling"),
     ]
-    add_table(s, 7.75, 1.0, 5.1, 3.6,
+    add_table(s, 8.15, 1.0, 4.75, 3.5,
               headers=["Item", "Specification"],
-              rows=rows2, header_size=10, body_size=10)
+              rows=rows2, header_size=10, body_size=9.5)
 
-    # Key takeaway
-    add_card(s, 0.55, 3.55, 7.0, 3.4, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 0.55, 3.55, 7.0, accent, thickness=0.06)
-    tb = add_textbox(s, 0.75, 3.75, 6.6, 3.2)
+    # Bottom — controlled comparison callout
+    add_card(s, 0.55, 3.65, 7.4, 3.3, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 3.65, 3.3, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 3.83, 6.95, 3.10)
     add_para(tb.text_frame, "Controlled comparison",
-              size=14, bold=True, color=accent)
+              size=13, bold=True, color=accent)
     add_para(tb.text_frame,
-              "Training data, backbone, and temporal scaffold are identical "
+              "▸  Training data · backbone · temporal scaffold — all matched "
               "to StableVSR.",
-              size=12.5, color=MUTED_INK, space_before=6)
+              size=11.5, color=MUTED_INK, space_before=6)
     add_para(tb.text_frame,
-              "The only architectural difference is the Wavelet Conditioning "
-              "Module (WCM) with BD-SFT injection.",
-              size=12.5, color=MUTED_INK, space_before=6)
+              "▸  유일한 architectural 차이 — Wavelet Conditioning Module "
+              "(WCM) + BD-SFT injection.",
+              size=11.5, color=MUTED_INK, space_before=4)
     add_para(tb.text_frame,
-              "⇒  Any REDS4 gap directly attributes to the WCM mechanism.",
-              size=12.5, bold=True, color=INK, space_before=8)
+              "⇒  REDS4 performance gap이 WCM에 의해 isolation됨 — "
+              "ablation-by-design.",
+              size=12, bold=True, color=INK, space_before=10)
 
     set_notes(s, (
-        "Experimental setup. Training uses the REDS dataset minus the four "
-        "REDS4 sequences — 236 sequences total — following the standard "
-        "convention from BasicVSR and StableVSR. Evaluation uses REDS4 "
-        "for in-domain, plus Vid4, UDM10, and SPMCS for "
-        "out-of-distribution.\n\n"
-        "Training config: AdamW with constant 1e-4 learning rate for 20 000 "
-        "iterations. Batch size 8, temporal window of 3 frames, 64×64 LR "
-        "patches mapped to 256×256 HR. Two RTX A6000 48GB GPUs.\n\n"
-        "The crucial point: all training hyperparameters and the backbone "
-        "are identical to StableVSR. The only architectural difference is "
-        "the WCM. This isolation-by-design is what lets us attribute the "
-        "REDS4 performance gap directly to the WCM mechanism."
+        "실험 셋업입니다.\n\n"
+        "Dataset — 학습은 REDS train split에서 240개 시퀀스 중 REDS4의 "
+        "4개 시퀀스를 제외한 236개로 진행합니다. 이건 BasicVSR과 "
+        "StableVSR의 표준 컨벤션을 따른 것입니다. 평가는 in-domain "
+        "REDS4와 out-of-distribution Vid4, UDM10, SPMCS 입니다.\n\n"
+        "Training config — AdamW 옵티마이저, learning rate 1e-4 constant, "
+        "20,000 iteration. Batch size 8, temporal window 3, 64×64 LR "
+        "patch와 256×256 HR patch 입니다. NVIDIA RTX A6000 48GB 2장으로 "
+        "학습했습니다.\n\n"
+        "가장 중요한 점은 이 실험이 controlled comparison으로 설계됐다는 "
+        "것입니다. Training data, backbone (SD v2.1), temporal scaffold "
+        "(ControlNet + RAFT + bidirectional sampling) — 모두 StableVSR와 "
+        "동일합니다. 유일한 차이는 Wavelet Conditioning Module과 BD-SFT "
+        "injection의 추가 뿐입니다. 따라서 REDS4 결과의 성능 차이가 "
+        "전적으로 WCM에 기인한다고 확실히 attribute할 수 있습니다 — "
+        "ablation-by-design 입니다."
     ))
 
 
@@ -1212,66 +1391,81 @@ def slide_metrics(prs):
                        subtitle="9 metrics across 4 categories")
 
     cats = [
-        ("Reconstruction fidelity",   "PSNR ↑ · SSIM ↑",
-         "Pixel and structural similarity.",
+        ("Reconstruction fidelity",
+         "PSNR ↑   ·   SSIM ↑",
+         "Pixel · structural similarity.",
          SEC[5]),
-        ("Full-ref perceptual",       "LPIPS ↓ · DISTS ↓",
+        ("Full-reference perceptual",
+         "LPIPS ↓   ·   DISTS ↓",
          "Deep-feature perceptual distance.",
          SEC[2]),
-        ("No-ref perceptual",         "MUSIQ ↑ · CLIP-IQA ↑ · NIQE ↓",
-         "Reference-free quality (critical for generative VSR).",
+        ("No-reference perceptual",
+         "MUSIQ ↑   ·   CLIP-IQA ↑   ·   NIQE ↓",
+         "Reference-free quality — critical for generative VSR.",
          SEC[3]),
-        ("Temporal consistency",      "tLPIPS ↓ · tOF ↓",
+        ("Temporal consistency",
+         "tLPIPS ↓   ·   tOF ↓",
          "Inter-frame perceptual / motion stability.",
-         SEC[5]),
+         SEC[1]),
     ]
     for i, (cat, metrics, body, col) in enumerate(cats):
         row = i // 2
         cidx = i % 2
-        x = 0.55 + cidx * 6.3
+        x = 0.55 + cidx * 6.15
         y = 1.0 + row * 2.0
-        add_card(s, x, y, 6.05, 1.8, fill=WHITE, line=LIGHT_GRAY)
-        add_accent_strip(s, x, y, 6.05, col, thickness=0.06)
-        tb = add_textbox(s, x + 0.18, y + 0.13, 5.7, 1.6)
+        stripe_card(s, x, y, 6.0, 1.85, accent=col, stripe_left=True,
+                     stripe_top=False)
+        tb = add_textbox(s, x + 0.25, y + 0.13, 5.65, 1.65)
         add_para(tb.text_frame, cat, size=13, bold=True, color=col)
         add_para(tb.text_frame, metrics, size=14, bold=True, color=INK,
                   space_before=4)
-        add_para(tb.text_frame, body, size=11, color=MUTED_INK, space_before=2)
+        add_para(tb.text_frame, body, size=11, color=MUTED_INK,
+                  space_before=2)
 
-    # Takeaway
-    add_card(s, 0.55, 5.05, 12.3, 1.9, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 0.55, 5.05, 12.3, accent, thickness=0.06)
-    tb = add_textbox(s, 0.85, 5.25, 11.7, 1.65)
+    # Bottom — perception-distortion footnote
+    add_card(s, 0.55, 5.10, 12.3, 1.85, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 5.10, 1.85, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 5.25, 11.85, 1.65)
     add_para(tb.text_frame, "Why so many metrics?",
-              size=13, bold=True, color=accent)
+              size=12.5, bold=True, color=accent)
     add_para(tb.text_frame,
-              "Generative VSR sits on the perception–distortion trade-off — "
-              "no single metric tells the full story. Pixel metrics under-"
-              "credit realistic synthesis; NR metrics complement reference-"
-              "based ones; temporal metrics expose flicker that per-frame "
-              "metrics miss.",
-              size=12, color=MUTED_INK, space_before=4)
+              "Generative VSR은 perception–distortion trade-off 위에 "
+              "위치 — 단일 metric으로 전체 그림을 보여줄 수 없습니다. "
+              "Pixel metric은 사실적인 합성을 페널라이즈하고, NR perceptual "
+              "metric은 reference-based metric을 보완하며, temporal metric은 "
+              "per-frame metric이 놓치는 flicker를 포착합니다.",
+              size=11.5, color=MUTED_INK, space_before=4)
 
     set_notes(s, (
-        "Nine metrics across four categories, because generative VSR sits "
-        "on the perception–distortion trade-off and no single number "
-        "tells the full story.\n\n"
-        "Reconstruction fidelity — PSNR and SSIM — measures pixel accuracy. "
-        "Full-reference perceptual — LPIPS and DISTS — uses deep features "
-        "to capture perceptual similarity. No-reference perceptual — "
-        "MUSIQ, CLIP-IQA, and NIQE — is critical for generative methods "
-        "because it doesn't penalize realistic synthesis that deviates "
-        "from pixel-exact ground truth.\n\n"
-        "Temporal consistency — tLPIPS and tOF — captures inter-frame "
-        "stability. tLPIPS is especially good at exposing the texture "
-        "flicker that pixel metrics miss."
+        "총 9개의 평가 지표를 4개 카테고리로 분류합니다.\n\n"
+        "Reconstruction fidelity — PSNR과 SSIM. Pixel-level 또는 "
+        "structural similarity로, generative model에는 다소 불리한 "
+        "지표입니다.\n\n"
+        "Full-reference perceptual — LPIPS와 DISTS. Deep feature 기반 "
+        "perceptual distance입니다. DISTS는 texture variation에 robust해 "
+        "generative VSR 평가에 특히 적합합니다.\n\n"
+        "No-reference perceptual — MUSIQ, CLIP-IQA, NIQE. Reference 없이 "
+        "quality를 평가하므로 generative model의 사실적 합성을 "
+        "underestimate하지 않습니다. 세 가지가 각각 transformer 기반, "
+        "vision-language 기반, natural scene statistics 기반이라 서로를 "
+        "보완합니다.\n\n"
+        "Temporal consistency — tLPIPS와 tOF. tLPIPS는 인접 프레임 간의 "
+        "perceptual difference로 texture-level flicker를 잘 잡아냅니다. "
+        "diffusion 기반 VSR 평가에 특히 중요합니다. tOF는 optical flow "
+        "차이로 motion fidelity를 측정합니다.\n\n"
+        "이렇게 다양한 metric을 쓰는 이유는 — generative VSR이 "
+        "perception-distortion trade-off 위에 있어서 단일 metric으로는 "
+        "공정한 평가가 불가능하기 때문입니다."
     ))
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# Section 5 — Results
+# ══════════════════════════════════════════════════════════════════════════
 def slide_results_reds4(prs):
     s, accent = add_content_slide(prs, section=5)
-    set_section_title(s, 5, "Results — REDS4",
-                       subtitle="Direct comparison vs. StableVSR")
+    set_section_title(s, 5, "Results · REDS4 — Direct vs. StableVSR")
 
     rows = [
         ("StableVSR",
@@ -1284,52 +1478,56 @@ def slide_results_reds4(prs):
          "+1.8%", "+0.1%", "−37.5%", "−46.3%", "+53.5%", "+62.9%",
          "−36.8%", "−62.9%", "−20.4%"),
     ]
-    add_table(s, 0.4, 1.0, 12.55, 1.85,
+    add_table(s, 0.4, 1.0, 12.55, 1.8,
               headers=["Method",
                        "PSNR↑", "SSIM↑", "LPIPS↓", "DISTS↓",
                        "MUSIQ↑", "CLIP-IQA↑", "NIQE↓", "tLPIPS↓", "tOF↓"],
-              rows=rows, header_size=9.5, body_size=10,
+              rows=rows, header_size=10, body_size=10,
               highlight_row_idx=1, highlight_fill=RGBColor(0xE3, 0xF0, 0xFF))
 
-    # Three big-number cards
-    add_kpi_card(s, 0.55, 3.15, 4.0, 1.85, label="Perceptual (LPIPS ↓)",
-                  value="−37.5 %", sub="0.309 → 0.193", accent=SEC[2])
-    add_kpi_card(s, 4.7, 3.15, 4.0, 1.85, label="Perceptual (MUSIQ ↑)",
-                  value="+53.5 %", sub="42.79 → 65.70", accent=SEC[3])
-    add_kpi_card(s, 8.85, 3.15, 4.0, 1.85, label="Temporal (tLPIPS ↓)",
-                  value="−62.9 %", sub="41.11 → 15.25", accent=accent)
+    # KPI cards
+    big_stat(s, 0.55, 3.1, 4.0, 1.8, label="Perceptual · LPIPS ↓",
+              value="−37.5 %", sub="0.309 → 0.193", accent=SEC[2])
+    big_stat(s, 4.7, 3.1, 4.0, 1.8, label="Perceptual · MUSIQ ↑",
+              value="+53.5 %", sub="42.79 → 65.70", accent=SEC[3])
+    big_stat(s, 8.85, 3.1, 4.0, 1.8, label="Temporal · tLPIPS ↓",
+              value="−62.9 %", sub="41.11 → 15.25", accent=accent)
 
-    # Interpretation strip
-    add_card(s, 0.55, 5.2, 12.3, 1.75, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 0.55, 5.2, 12.3, accent, thickness=0.06)
-    tb = add_textbox(s, 0.85, 5.4, 11.7, 1.5)
+    # Interpretation
+    add_card(s, 0.55, 5.1, 12.3, 1.85, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 5.1, 1.85, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 5.25, 11.85, 1.6)
     add_para(tb.text_frame, "Interpretation",
               size=13, bold=True, color=accent)
     add_para(tb.text_frame,
-              "Same training data, backbone, and temporal scaffold — only "
-              "WCM differs. The gap isolates the wavelet-conditioned "
-              "BD-SFT contribution.",
+              "Training data · backbone · temporal scaffold이 모두 "
+              "matched된 상태이므로, 이 성능 gap은 wavelet-conditioned "
+              "BD-SFT mechanism의 단독 기여로 정확하게 attribute됩니다.",
               size=12, color=MUTED_INK, space_before=4)
 
     set_notes(s, (
-        "This is the most direct comparison in the thesis. Same training "
-        "data, same Stable Diffusion v2.1 backbone, same temporal scaffold "
-        "of ControlNet plus RAFT-based optical flow with bidirectional "
-        "sampling. The only difference is the WCM module.\n\n"
-        "The proposed method improves on every single metric.\n\n"
-        "Most importantly — perceptual: LPIPS drops 37.5 percent, DISTS "
-        "drops 46.3 percent, MUSIQ rises 53.5 percent. Temporal "
-        "consistency: tLPIPS drops 62.9 percent — from 41 to 15. Pixel "
-        "fidelity edges up marginally too.\n\n"
-        "Because every other variable is matched, this gap attributes "
-        "directly to the wavelet-conditioned BD-SFT mechanism."
+        "이 슬라이드가 본 논문에서 가장 직접적인 비교 입니다.\n\n"
+        "StableVSR 대비 9개 metric 전부에서 향상되었습니다. PSNR도 "
+        "0.44 dB 올라가고, 그 외 perceptual / temporal metric은 모두 "
+        "큰 폭으로 개선됐습니다.\n\n"
+        "특히 주목할 세 가지 — LPIPS는 0.309에서 0.193으로 37.5% 감소, "
+        "MUSIQ는 42.79에서 65.70으로 53.5% 증가, tLPIPS는 41.11에서 "
+        "15.25로 무려 62.9% 감소입니다. 3D attention이나 full-network "
+        "fine-tuning 없이 이 정도 temporal consistency 향상을 달성한 "
+        "것입니다.\n\n"
+        "Training data, backbone, temporal scaffold가 모두 동일하므로 — "
+        "유일한 차이는 WCM의 유무 입니다. 따라서 이 gap은 정확히 본 "
+        "연구의 기여라고 attribute할 수 있습니다. Decoder의 HIGH band "
+        "injection 덕분에 texture synthesis 단계에서 강한 conditioning이 "
+        "들어가, perceptual axis에서의 향상이 가장 두드러집니다."
     ))
 
 
 def slide_results_dm_group(prs):
     s, accent = add_content_slide(prs, section=5)
-    set_section_title(s, 5, "Results — Within the DM Group",
-                       subtitle="vs. DGAF-VSR & cross-paradigm reference")
+    set_section_title(s, 5, "Results · REDS4 — Within DM Group",
+                       subtitle="vs. DGAF-VSR · BasicVSR++ cross-paradigm")
 
     rows = [
         ("non-DM", "BasicVSR++",
@@ -1345,18 +1543,17 @@ def slide_results_dm_group(prs):
          "24.48", "0.691", "0.193", "0.088", "65.70", "0.386", "2.77",
          "15.25", "11.118", "1.11"),
     ]
-    add_table(s, 0.3, 1.0, 12.75, 2.5,
+    add_table(s, 0.3, 1.0, 12.75, 2.4,
               headers=["Paradigm", "Method",
                        "PSNR↑", "SSIM↑", "LPIPS↓", "DISTS↓",
                        "MUSIQ↑", "CLIP-IQA↑", "NIQE↓",
                        "tLPIPS↓", "tOF↓", "Mean rank"],
-              rows=rows, header_size=9, body_size=9,
+              rows=rows, header_size=9, body_size=8.5,
               highlight_row_idx=3, highlight_fill=RGBColor(0xE3, 0xF0, 0xFF))
 
-    # Two takeaway cards
-    add_card(s, 0.55, 3.85, 6.0, 3.1, fill=WHITE, line=SEC[3], line_width=1.0)
-    add_accent_strip(s, 0.55, 3.85, 6.0, SEC[3], thickness=0.06)
-    tb = add_textbox(s, 0.75, 4.05, 5.6, 2.9)
+    # Two takeaways
+    stripe_card(s, 0.55, 3.7, 6.0, 3.3, accent=SEC[3])
+    tb = add_textbox(s, 0.75, 3.85, 5.6, 3.15)
     add_para(tb.text_frame, "vs. DGAF-VSR (strongest DM baseline)",
               size=13, bold=True, color=SEC[3])
     for line, gain in [
@@ -1368,54 +1565,55 @@ def slide_results_dm_group(prs):
         p.space_before = Pt(4)
         r1 = p.add_run()
         r1.text = "▸  " + line + "    "
-        r1.font.size = Pt(12)
+        r1.font.size = Pt(11.5)
         r1.font.color.rgb = MUTED_INK
         r2 = p.add_run()
         r2.text = gain
-        r2.font.size = Pt(12)
+        r2.font.size = Pt(11.5)
         r2.font.bold = True
         r2.font.color.rgb = SEC[3]
     add_para(tb.text_frame, "Mean rank within DM:  1.11  (vs. 1.89 / 3.00)",
-              size=12, bold=True, color=INK, space_before=8)
+              size=12, bold=True, color=INK, space_before=10)
 
-    add_card(s, 6.85, 3.85, 6.0, 3.1, fill=WHITE, line=DEEP, line_width=1.0)
-    add_accent_strip(s, 6.85, 3.85, 6.0, DEEP, thickness=0.06)
-    tb = add_textbox(s, 7.05, 4.05, 5.6, 2.9)
+    stripe_card(s, 6.85, 3.7, 6.0, 3.3, accent=DEEP)
+    tb = add_textbox(s, 7.05, 3.85, 5.6, 3.15)
     add_para(tb.text_frame, "Cross-paradigm reference — BasicVSR++",
               size=13, bold=True, color=DEEP)
+    add_para(tb.text_frame, "PSNR / SSIM은 BasicVSR++가 우수 (regression).",
+              size=11.5, color=MUTED_INK, space_before=4)
     add_para(tb.text_frame,
-              "Leads on PSNR / SSIM — regression target.",
-              size=12, color=MUTED_INK, space_before=4)
+              "Perceptual 4 metric에서는 모두 열위 — Blau & Michaeli "
+              "(2018)의 perception-distortion trade-off.",
+              size=11.5, color=MUTED_INK, space_before=4)
     add_para(tb.text_frame,
-              "Loses on all four perceptual metrics — classical "
-              "perception–distortion trade-off (Blau & Michaeli, 2018).",
-              size=12, color=MUTED_INK, space_before=4)
-    add_para(tb.text_frame,
-              "Within-DM ranking is the fair comparison axis for the "
-              "proposed mechanism.",
-              size=12, italic=True, color=GRAY, space_before=6)
+              "DM 내부 ranking이 본 연구 mechanism의 공정한 비교 축.",
+              size=11.5, italic=True, color=GRAY, space_before=6)
 
     set_notes(s, (
-        "Broadening the REDS4 comparison. Within the diffusion-based group, "
-        "WC-BD-SFT achieves the best score on eight of nine metrics — only "
-        "SSIM is second-place. Mean rank within the DM group is 1.11, "
-        "compared to DGAF-VSR's 1.89 and StableVSR's 3.00.\n\n"
-        "DGAF-VSR is the strongest existing DM baseline. Versus DGAF-VSR: "
-        "LPIPS −37.1%, MUSIQ +51.4%, tLPIPS −62.0%. Both methods adapt a "
-        "pre-trained diffusion prior with a small additional module, but "
-        "they target different mechanisms — DGAF uses feature-domain "
-        "warping; we use frequency-domain conditioning.\n\n"
-        "BasicVSR++ I include as a cross-paradigm reference. It leads on "
-        "pixel fidelity but loses on every perceptual metric — the "
-        "classical perception–distortion trade-off. So within-DM ranking "
-        "is the fair axis for comparing my mechanism."
+        "REDS4 in-domain 비교를 좀 더 넓은 범위로 확장한 결과 입니다.\n\n"
+        "Diffusion model 그룹 내에서 본 연구의 WC-BD-SFT는 9개 metric "
+        "중 8개에서 best, 1개(SSIM)에서 second-best입니다. Mean rank가 "
+        "1.11으로 DGAF-VSR의 1.89, StableVSR의 3.00에 비해 명확히 "
+        "앞섭니다.\n\n"
+        "왼쪽 — DGAF-VSR과의 비교 입니다. DGAF-VSR는 CVPR 2026에 "
+        "발표된 가장 최근의 diffusion-based VSR로, 본 연구의 가장 강한 "
+        "baseline 입니다. LPIPS 37.1% 감소, MUSIQ 51.4% 증가, tLPIPS "
+        "62.0% 감소로 perceptual axis에서 일관된 큰 폭의 향상이 "
+        "있습니다.\n\n"
+        "오른쪽 — BasicVSR++는 cross-paradigm reference 입니다. CNN 기반 "
+        "regression model이라 PSNR과 SSIM에서는 우수하지만, 4개 "
+        "perceptual metric 모두에서 열위 입니다. 이건 Blau와 Michaeli의 "
+        "perception-distortion trade-off의 전형적인 패턴 입니다. "
+        "다른 paradigm을 직접 ranking으로 비교하는 건 공정하지 않으므로, "
+        "DM 내부 ranking을 본 연구 mechanism의 공정한 비교 축으로 "
+        "삼습니다."
     ))
 
 
 def slide_results_cross_dataset(prs):
     s, accent = add_content_slide(prs, section=5)
-    set_section_title(s, 5, "Results — Out-of-Distribution",
-                       subtitle="Vid4 · UDM10 · SPMCS")
+    set_section_title(s, 5, "Results · Cross-Dataset",
+                       subtitle="Vid4 · UDM10 · SPMCS — OOD evaluation")
 
     rows = [
         ("Vid4",  "BasicVSR++",  "26.26", "0.828", "0.189", "61.50", "0.341", "5.04", "15.12"),
@@ -1431,59 +1629,58 @@ def slide_results_cross_dataset(prs):
         ("SPMCS", "DGAF-VSR",    "20.06", "0.511", "0.178", "67.70", "0.533", "3.61", "20.10"),
         ("SPMCS", "Ours",        "19.94", "0.506", "0.183", "67.22", "0.503", "3.70", "31.59"),
     ]
-    add_table(s, 0.35, 1.0, 7.4, 5.95,
+    add_table(s, 0.35, 1.0, 7.3, 5.95,
               headers=["Set", "Method",
                        "PSNR↑", "SSIM↑", "LPIPS↓", "MUSIQ↑",
                        "CLIP-IQA↑", "NIQE↓", "tLPIPS↓"],
               rows=rows, header_size=9, body_size=8.5)
 
-    # Right column — three observation cards
+    # Right column — observations
     obs = [
         ("UDM10 — NR perceptual wins",
-         "MUSIQ +13.5 %, CLIP-IQA +23.5 %, NIQE −11.6 %.\n"
-         "Higher tLPIPS reflects flicker on short static clips — see Discussion.",
+         "MUSIQ +13.5 % · CLIP-IQA +23.5 % · NIQE −11.6 % (in DM group).\n"
+         "Higher tLPIPS — short static clips, see Discussion.",
          SEC[3]),
         ("SPMCS — temporal gain",
-         "tLPIPS 51.11 → 31.59 over StableVSR (−38.2 %).\n"
-         "Frequency conditioning helps on longer motion-rich content.",
+         "tLPIPS 51.11 → 31.59 (−38.2 %) over StableVSR.\n"
+         "Long-motion content에서는 frequency conditioning이 "
+         "stability에 도움.",
          SEC[2]),
         ("Vid4 — distribution gap",
-         "Compressed SD vs. clean REDS 720p ⇒ smaller gains.\n"
-         "DGAF's HR feature alignment is complementary — fusion candidate.",
+         "Compressed SD vs. clean REDS 720p — gain 감소.\n"
+         "DGAF의 OGWM과 fusion이 future work.",
          DEEP),
     ]
     for i, (h, body, col) in enumerate(obs):
         y = 1.0 + i * 1.95
-        add_card(s, 7.95, y, 4.95, 1.85, fill=WHITE, line=LIGHT_GRAY)
-        add_accent_strip(s, 7.95, y, 4.95, col, thickness=0.05)
-        tb = add_textbox(s, 8.12, y + 0.12, 4.65, 1.7)
+        stripe_card(s, 7.95, y, 4.95, 1.85, accent=col)
+        tb = add_textbox(s, 8.12, y + 0.13, 4.65, 1.7)
         add_para(tb.text_frame, h, size=12, bold=True, color=col)
         add_para(tb.text_frame, body, size=10.5, color=MUTED_INK,
                   space_before=4)
 
     set_notes(s, (
-        "Out-of-distribution evaluation tells a more nuanced story.\n\n"
-        "On UDM10, we get the best NR perceptual scores in the DM group — "
-        "MUSIQ, CLIP-IQA, NIQE all best — but a higher tLPIPS. UDM10 "
-        "sequences are short (32 frames) with limited motion, and "
-        "wavelet-driven texture synthesis introduces small per-frame "
-        "variations that accumulate as flicker. I'll discuss this in "
-        "the next slide.\n\n"
-        "On SPMCS — longer sequences with rich motion — tLPIPS improves "
-        "substantially over StableVSR, suggesting the frequency "
-        "conditioning helps temporal stability when there's enough "
-        "motion for bidirectional sampling to absorb stochastic "
-        "variation.\n\n"
-        "On Vid4 — compressed SD content — the distribution gap from "
-        "REDS limits gains. DGAF-VSR does best on Vid4, but its "
-        "high-resolution feature warping is orthogonal to my frequency "
-        "approach, so combining the two is a natural future direction."
+        "Out-of-distribution 평가 결과 입니다. 흥미로운 패턴이 보입니다.\n\n"
+        "UDM10에서는 DM 그룹 내 NR perceptual metric을 모두 1위로 받았습니다 "
+        "— MUSIQ 13.5%, CLIP-IQA 23.5%, NIQE 11.6% 향상. 다만 tLPIPS는 "
+        "14.48로 다른 방법보다 높습니다. UDM10은 32 프레임의 짧고 거의 "
+        "정적인 시퀀스 이고, wavelet-driven texture synthesis가 만든 "
+        "프레임별 미세한 차이가 motion으로 흡수되지 못해 flicker로 "
+        "축적된 결과 입니다. 이건 Discussion에서 자세히 다룹니다.\n\n"
+        "SPMCS는 반대로 long-motion content 입니다. tLPIPS가 51.11에서 "
+        "31.59로 38.2% 감소 — frequency conditioning이 충분한 motion이 "
+        "있을 때는 temporal stability에 도움이 됩니다.\n\n"
+        "Vid4는 compressed SD 콘텐츠로 REDS의 clean 720p와 distribution "
+        "차이가 가장 큽니다. 본 연구의 wavelet prior가 REDS-like statistic "
+        "에 specialize되어 있어 gain이 작습니다. DGAF의 high-resolution "
+        "feature warping이 이쪽에서 강점을 보이는데, 이건 본 연구와 "
+        "orthogonal하므로 fusion이 자연스러운 future work 입니다."
     ))
 
 
 def slide_ablation(prs):
     s, accent = add_content_slide(prs, section=5)
-    set_section_title(s, 5, "Ablation — Frequency-Band Injection",
+    set_section_title(s, 5, "Ablation · Frequency-Band Injection",
                        subtitle="Inference-time band disabling on REDS4")
 
     rows = [
@@ -1504,174 +1701,169 @@ def slide_ablation(prs):
               highlight_row_idx=0,
               highlight_fill=RGBColor(0xE3, 0xF0, 0xFF))
 
-    # Three insight cards
     insights = [
         ("HIGH is critical",
          "tLPIPS  15.25 → 22.11   (+45.0 %)\n"
          "LPIPS   0.193 → 0.223   (+15.5 %)",
          HIGH_BAND),
         ("LOW shapes perception",
-         "MUSIQ   65.70 → 63.39\n"
+         "MUSIQ    65.70 → 63.39\n"
          "CLIP-IQA 0.386 → 0.335\n"
-         "(PSNR/SSIM slightly rise — trade-off)",
+         "(PSNR / SSIM slightly rise — trade-off)",
          LOW_BAND),
         ("Super-additive when both off",
-         "LPIPS w/o both = 0.247 — exceeds either single disable.\n"
+         "LPIPS = 0.247 — worse than either single disable.\n"
          "MUSIQ collapses to 59.35.\n"
          "⇒ bands are jointly necessary.",
          DEEP),
     ]
     for i, (h, body, col) in enumerate(insights):
         x = 0.55 + i * 4.16
-        add_card(s, x, 3.55, 4.0, 3.4, fill=WHITE, line=col, line_width=1.0)
-        add_accent_strip(s, x, 3.55, 4.0, col, thickness=0.06)
-        tb = add_textbox(s, x + 0.18, 3.75, 3.65, 3.2)
+        stripe_card(s, x, 3.55, 4.0, 3.4, accent=col)
+        tb = add_textbox(s, x + 0.18, 3.70, 3.65, 3.2)
         add_para(tb.text_frame, h, size=13, bold=True, color=col)
         add_para(tb.text_frame, body, size=11.5, color=MUTED_INK,
                   space_before=6)
 
     set_notes(s, (
-        "Ablation on band injection. Three variants — disabling HIGH, "
-        "LOW, or both — at inference time by setting γ=1 and β=0. The "
-        "same trained model is used for all variants, so the effects "
-        "are not confounded by separate training trajectories.\n\n"
-        "Disabling HIGH degrades all perceptual and temporal metrics "
-        "substantially — tLPIPS jumps from 15 to 22, LPIPS from 0.193 to "
-        "0.223. This confirms HIGH-band guidance at the decoder is "
-        "critical for inter-frame texture coherence.\n\n"
-        "Disabling LOW shows the opposite pattern — PSNR and SSIM "
-        "marginally improve but NR perceptual metrics deteriorate. LOW-"
-        "band conditioning shapes the structural representation in a "
-        "way that improves perceptual naturalness at the cost of pixel "
-        "fidelity — exactly the perception–distortion trade-off in "
-        "miniature.\n\n"
-        "Critically — when both are off, degradation is super-additive. "
-        "LPIPS hits 0.247, worse than either single disable. This means "
-        "the two bands carry complementary information that interacts "
-        "non-linearly. The asymmetric injection is not just additive — "
-        "it's synergistic."
+        "Band injection ablation 입니다. 학습된 동일 모델에서 inference "
+        "시점에 SFT modulation을 선택적으로 disable (γ=1, β=0)해 각 "
+        "band의 기여를 isolate 했습니다. 별도 학습이 아니라 inference "
+        "시점 ablation이라 학습 trajectory의 차이로 인한 confound가 "
+        "없습니다.\n\n"
+        "HIGH를 disable하면 모든 perceptual / temporal metric이 크게 "
+        "악화 됩니다. tLPIPS는 15.25에서 22.11로 45% 증가, LPIPS는 "
+        "15.5% 증가 합니다. Decoder에서 texture detail을 합성하는 "
+        "stage의 HIGH-band guidance가 inter-frame texture coherence에 "
+        "결정적이라는 게 확인됩니다.\n\n"
+        "LOW를 disable하면 패턴이 다릅니다 — PSNR과 SSIM은 미세하게 "
+        "오히려 좋아지지만, NR perceptual metric은 떨어집니다. Encoder "
+        "에서의 low-band guidance가 structural representation을 perceptually "
+        "natural한 방향으로 shaping 하는데, 그게 disable되면 fidelity "
+        "쪽으로 살짝 회귀하는 거죠. 이건 perception-distortion trade-off "
+        "의 미니어처 입니다.\n\n"
+        "가장 중요한 발견은 super-additive degradation 입니다. 둘 다 "
+        "disable하면 LPIPS가 0.247로, 단일 disable의 worst case인 0.223 "
+        "보다 더 나빠집니다. MUSIQ도 59.35로 폭락합니다. 즉 두 band가 "
+        "독립적으로 좋은 게 아니라, U-Net 내부에서 비선형적으로 "
+        "interaction하며 jointly necessary 하다는 의미입니다. Asymmetric "
+        "injection이 단순한 additive 개선이 아니라 synergistic이라는 "
+        "증거입니다."
     ))
 
 
 def slide_discussion(prs):
     s, accent = add_content_slide(prs, section=5)
-    set_section_title(s, 5, "Discussion",
-                       subtitle="Three trade-offs revealed")
+    set_section_title(s, 5, "Discussion · Trade-offs Revealed")
 
-    # Three cards
     cards = [
-        ("(1) Perception–distortion",
-         "BasicVSR++ → fidelity peak; DM methods → perceptual peak.\n"
-         "WC-BD-SFT pushes furthest toward perceptual extreme.",
+        ("Perception–distortion",
+         "BasicVSR++ → 고정밀 pixel.   DM 방법 → 고품질 perceptual.\n"
+         "WC-BD-SFT는 perceptual 극단에 위치 — REDS4 / UDM10 NR 1위.",
          SEC[5]),
-        ("(2) Specialization–generalization",
-         "REDS-only training isolates the WCM contribution.\n"
-         "Wavelet priors are most effective on REDS-like statistics; "
-         "smaller gains on Vid4.",
+        ("Specialization–generalization",
+         "REDS-only 학습 — WCM 기여 isolation.\n"
+         "REDS-like statistics에 강함 (REDS4 최강) · Vid4 SD에서는 gain 감소.",
          SEC[3]),
-        ("(3) Temporal stability vs. motion",
-         "UDM10 (32 frames, static) → tLPIPS regression.\n"
-         "SPMCS (long motion) → tLPIPS improvement.\n"
-         "Hypothesis: bidirectional sampling needs motion to absorb "
-         "stochasticity.",
+        ("Temporal stability ↔ motion",
+         "UDM10 (32 frame, 정적) → tLPIPS 악화.\n"
+         "SPMCS (long motion) → tLPIPS 개선.\n"
+         "Bidirectional sampling은 motion을 흡수 매개로 사용.",
          SEC[2]),
     ]
     for i, (h, body, col) in enumerate(cards):
         y = 1.0 + i * 2.0
-        add_card(s, 0.55, y, 12.3, 1.85, fill=WHITE, line=LIGHT_GRAY)
-        add_accent_strip(s, 0.55, y, 12.3, col, thickness=0.06)
-        nb = slide_number_box(s, 0.75, y + 0.18, 0.5, 0.5,
-                               number=i + 1, color=col)
-        tb = add_textbox(s, 1.4, y + 0.18, 11.3, 1.6)
-        add_para(tb.text_frame, h.split(") ", 1)[1] if ") " in h else h,
-                  size=13, bold=True, color=col)
+        stripe_card(s, 0.55, y, 12.3, 1.85, accent=col, stripe_left=True,
+                     stripe_top=False)
+        tb = add_textbox(s, 0.85, y + 0.13, 12.0, 1.65)
+        add_para(tb.text_frame, h, size=13, bold=True, color=col)
         for line in body.split("\n"):
             add_para(tb.text_frame, line, size=11.5, color=MUTED_INK,
                       space_before=2, space_after=2)
 
     set_notes(s, (
-        "Three trade-offs that the experiments reveal.\n\n"
-        "First — perception versus distortion across paradigms. BasicVSR++ "
-        "as a regression model maximises pixel fidelity. The DM methods "
-        "are biased toward perceptually plausible textures at the cost of "
-        "strict pixel accuracy. WC-BD-SFT pushes furthest toward the "
-        "perceptual extreme.\n\n"
-        "Second — specialization versus generalization. Training is "
-        "REDS-only by design — to isolate the WCM contribution under "
-        "matched conditions. Frequency priors specialize to REDS's "
-        "wavelet statistics, so we see the largest gains on REDS-like "
-        "content and smaller gains on Vid4-like content. This is the "
-        "specialization–generalization trade-off inherent to "
-        "single-distribution training, and it's a separate research "
-        "question from the mechanism being proposed.\n\n"
-        "Third — temporal stability versus motion. On UDM10's short "
-        "32-frame static clips, wavelet-driven texture synthesis "
-        "introduces small per-frame variations that accumulate as "
-        "flicker. On SPMCS's longer motion-rich content, the opposite "
-        "happens — tLPIPS substantially improves. My hypothesis is that "
-        "bidirectional sampling needs sufficient motion to absorb "
-        "per-frame stochasticity."
+        "실험으로 드러난 세 가지 trade-off 입니다.\n\n"
+        "첫째 — paradigm 간 perception-distortion trade-off 입니다. "
+        "BasicVSR++는 CNN regression model이라 pixel fidelity를 최대화 "
+        "하지만 perceptually over-smoothed 합니다. DM 방법들은 사실적 "
+        "texture를 만들지만 pixel accuracy를 일부 희생합니다. 본 연구의 "
+        "WC-BD-SFT는 perceptual 극단을 추구해서 REDS4와 UDM10에서 NR "
+        "perceptual metric 1위 입니다.\n\n"
+        "둘째 — specialization-generalization trade-off 입니다. 본 연구는 "
+        "WCM 기여를 isolate하기 위해 의도적으로 REDS-only 학습을 "
+        "선택했습니다. 그 결과 wavelet prior가 REDS의 frequency statistics "
+        "에 specialize되어 — REDS4에서는 최강이지만 Vid4 같은 compressed "
+        "SD에서는 gain이 작습니다. 이건 single-distribution training의 "
+        "본질적 trade-off이지, mechanism의 한계가 아닙니다. 별도의 연구 "
+        "질문 입니다.\n\n"
+        "셋째 — sequence motion에 따른 temporal stability 입니다. UDM10 "
+        "처럼 짧고 정적인 시퀀스에서는 wavelet-driven texture의 미세 "
+        "variation이 flicker로 축적됩니다. 반면 SPMCS처럼 motion이 풍부한 "
+        "long sequence에서는 tLPIPS가 향상됩니다. Bidirectional sampling이 "
+        "motion을 stochastic variation을 흡수하는 매개로 활용한다는 "
+        "가설로 설명 가능합니다."
     ))
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# Section 6 — Conclusion
+# ══════════════════════════════════════════════════════════════════════════
 def slide_limitations(prs):
     s, accent = add_content_slide(prs, section=6)
     set_section_title(s, 6, "Limitations")
 
     items = [
         ("Training-distribution dependence",
-         "Best on REDS-like content; smaller gains on compressed SD (Vid4).",
-         "Broader training mix or degradation-aware augmentation can "
-         "narrow the gap."),
+         "REDS-like content에서 최강 · Vid4 SD에서 gain 감소.",
+         "광범위한 학습 mix · degradation-aware augmentation"),
         ("Perception–distortion trade-off",
-         "PSNR/SSIM sacrificed for perceptual quality, esp. on UDM10.",
-         "Intrinsic to generative VSR — suited to perceptual applications, "
-         "not strict pixel accuracy."),
+         "PSNR/SSIM을 perceptual quality에 일부 양보 — 특히 UDM10.",
+         "Perceptual application에 적합 · 의료/과학 영상엔 부적합"),
         ("Short-static flicker",
-         "tLPIPS higher than DGAF / StableVSR on UDM10 (32-frame clips).",
-         "Add lightweight temporal regularization (flow-guided latent "
-         "warping) — see Future Work."),
+         "UDM10 (32 frame)에서 DGAF/StableVSR보다 tLPIPS 높음.",
+         "Lightweight temporal regularization (flow-guided latent warping)"),
         ("Computational overhead",
-         "Four-level DT-CWT adds modest per-frame cost.",
-         "Dominated by diffusion denoising; further optimisation possible "
-         "via learnable frequency analysis."),
-        ("Stochasticity & comparison scope",
-         "Single fixed seed (42) for reproducibility; some 2025 methods "
-         "(RVRT, MGLD, DiffVSR, …) not benchmarked.",
-         "Multi-seed evaluation and broader benchmarking left as future "
-         "work."),
+         "4-level DT-CWT가 frame당 modest cost 추가.",
+         "Diffusion denoising cost에 비해 작음 · 추가 최적화 가능"),
+        ("Comparison scope",
+         "Single fixed seed · 2025년 다수 method 미평가.",
+         "Multi-seed evaluation · RVRT / MGLD / DiffVSR 후속 비교"),
     ]
     for i, (h, situation, fix) in enumerate(items):
         col = i % 2
         row = i // 2
-        x = 0.55 + col * 6.3
+        x = 0.55 + col * 6.15
         y = 1.0 + row * 2.0
         if row == 2 and col == 1:
-            continue  # only 5 items; skip last grid slot
-        add_card(s, x, y, 6.05, 1.85, fill=WHITE, line=LIGHT_GRAY)
-        add_accent_strip(s, x, y, 6.05, accent, thickness=0.05)
-        tb = add_textbox(s, x + 0.18, y + 0.12, 5.7, 1.65)
+            continue
+        stripe_card(s, x, y, 6.0, 1.85, accent=accent)
+        tb = add_textbox(s, x + 0.2, y + 0.13, 5.65, 1.65)
         add_para(tb.text_frame, h, size=12.5, bold=True, color=accent)
         add_para(tb.text_frame, situation, size=11, color=MUTED_INK,
-                  space_before=3)
+                  space_before=4)
         add_para(tb.text_frame, "→ " + fix, size=10.5, italic=True,
                   color=GRAY, space_before=2)
 
     set_notes(s, (
-        "Five limitations I want to explicitly acknowledge.\n\n"
-        "One — training-distribution dependence. The wavelet priors are "
-        "specialized to REDS-like content. Vid4 with compressed SD "
-        "content sees smaller gains.\n\n"
-        "Two — the perception–distortion trade-off is real. PSNR is "
-        "sacrificed for perceptual quality, especially on UDM10. This is "
-        "intrinsic to generative VSR.\n\n"
-        "Three — short, quasi-static sequences flicker more than the "
-        "baselines, as I showed in the UDM10 results.\n\n"
-        "Four — the four-level DT-CWT adds modest computational overhead, "
-        "though it's small compared to the diffusion denoising cost.\n\n"
-        "Five — single-seed evaluation and limited comparison scope. "
-        "Recent 2025 methods like DiffVSR, STAR, SeedVR2 were not "
-        "benchmarked due to release-timing and GPU constraints."
+        "본 연구의 한계를 다섯 가지로 명시적으로 인정합니다.\n\n"
+        "첫째 — training distribution 의존성. REDS-like content에서는 "
+        "강하지만 Vid4 같은 compressed SD에서는 gain이 작습니다. 광범위한 "
+        "data mixture와 degradation-aware augmentation으로 mitigation "
+        "가능합니다.\n\n"
+        "둘째 — perception-distortion trade-off가 실재합니다. PSNR과 "
+        "SSIM을 perceptual quality에 일부 양보합니다. UDM10에서 PSNR이 "
+        "BasicVSR++의 37.48 dB 대비 25.54 dB 입니다. 본 framework는 "
+        "perceptual application에 적합하고, 의료 영상이나 과학 영상처럼 "
+        "strict pixel accuracy가 필요한 영역에는 부적합 합니다.\n\n"
+        "셋째 — short / quasi-static sequence에서 flicker가 더 심합니다. "
+        "Lightweight temporal regularization 추가로 해결 가능합니다.\n\n"
+        "넷째 — 4-level DT-CWT의 computational overhead. 다행히 diffusion "
+        "denoising 비용에 비해 작아서 critical bottleneck은 아닙니다.\n\n"
+        "다섯째 — comparison scope의 제한. 재현성을 위해 단일 seed(42)를 "
+        "사용했고 multi-seed evaluation이 future work 입니다. 또한 "
+        "release timing과 GPU 제약으로 RVRT, MGLD-VSR, DiffVSR, STAR, "
+        "DC-VSR, DLoRAL, UltraVSR, SeedVR2 등 일부 최신 method는 "
+        "벤치마크하지 못했습니다."
     ))
 
 
@@ -1680,50 +1872,55 @@ def slide_conclusion(prs):
     set_section_title(s, 6, "Conclusion · Key Findings")
 
     # Summary card
-    add_card(s, 0.55, 1.0, 12.3, 1.8, fill=SOFT_BG, line=accent, line_width=1.0)
-    add_accent_strip(s, 0.55, 1.0, 12.3, accent, thickness=0.06)
-    tb = add_textbox(s, 0.75, 1.18, 11.9, 1.65)
-    add_para(tb.text_frame, "Frequency-domain conditioning is an effective "
-              "inductive bias for diffusion-based VSR.",
+    add_card(s, 0.55, 1.0, 12.3, 1.8, fill=SOFT_BG2, line=LIGHT_GRAY,
+              line_width=0.5)
+    add_left_stripe(s, 0.55, 1.0, 1.8, accent, thickness=0.10)
+    tb = add_textbox(s, 0.85, 1.18, 11.85, 1.6)
+    add_para(tb.text_frame,
+              "Frequency-domain conditioning is an effective inductive bias "
+              "for diffusion-based VSR.",
               size=15, bold=True, color=INK)
     add_para(tb.text_frame,
               "WC-BD-SFT injects DT-CWT priors into a frozen pre-trained "
               "diffusion U-Net via asymmetric encoder-decoder modulation, "
               "with magnitude-phase decoupling and a band-decoupled wavelet "
               "loss — at only 6.22 M added trainable parameters.",
-              size=12, color=MUTED_INK, space_before=6)
+              size=11.5, color=MUTED_INK, space_before=6)
 
     # Three KPI cards
-    add_kpi_card(s, 0.55, 3.0, 4.0, 3.95,
-                  label="REDS4 · tLPIPS",
-                  value="−62.9 %",
-                  sub="41.11  →  15.25\n\nvs. StableVSR baseline",
-                  accent=SEC[2])
-    add_kpi_card(s, 4.7, 3.0, 4.0, 3.95,
-                  label="REDS4 · HF spectral power",
-                  value="0.693",
-                  sub="vs. StableVSR's 0.341\n\n+103 % HF retention",
-                  accent=SEC[3])
-    add_kpi_card(s, 8.85, 3.0, 4.0, 3.95,
-                  label="Frequency Encoder",
-                  value="6.22 M",
-                  sub="≈ 3 % of ControlNet\n\nU-Net + VAE remain frozen",
-                  accent=SEC[5])
+    big_stat(s, 0.55, 3.0, 4.0, 4.0,
+              label="REDS4 · tLPIPS",
+              value="−62.9 %",
+              sub="41.11  →  15.25\n\nvs. StableVSR baseline",
+              accent=SEC[2])
+    big_stat(s, 4.7, 3.0, 4.0, 4.0,
+              label="REDS4 · HF spectral power",
+              value="0.693",
+              sub="vs. StableVSR's 0.341\n\n+103 % HF retention",
+              accent=SEC[3])
+    big_stat(s, 8.85, 3.0, 4.0, 4.0,
+              label="Frequency Encoder",
+              value="6.22 M",
+              sub="≈ 3 % of ControlNet\n\nU-Net + VAE remain frozen",
+              accent=SEC[5])
 
     set_notes(s, (
-        "To summarize. The thesis answers — yes, frequency-domain "
-        "conditioning is an effective and parameter-efficient inductive "
-        "bias for diffusion-based VSR.\n\n"
-        "Three headline numbers tell the story.\n\n"
-        "First — temporal consistency. tLPIPS drops 62.9 percent on the "
-        "in-domain REDS4 benchmark.\n\n"
-        "Second — frequency-domain fidelity. We retain 69.3 percent of "
-        "the ground-truth high-frequency power, compared to StableVSR's "
-        "34.1 percent — more than double.\n\n"
-        "Third — parameter efficiency. The Frequency Encoder is 6.22 M "
-        "parameters, about 3 percent of the ControlNet backbone. The "
-        "pre-trained U-Net and VAE remain fully frozen — the generative "
-        "prior is preserved by construction."
+        "결론을 요약합니다.\n\n"
+        "본 학위논문의 핵심 발견은 — frequency-domain conditioning이 "
+        "diffusion-based VSR을 위한 effective하고 parameter-efficient한 "
+        "inductive bias라는 것입니다. WC-BD-SFT는 DT-CWT prior를 frozen "
+        "pre-trained diffusion U-Net에 asymmetric encoder-decoder injection "
+        "으로 주입하며, magnitude-phase 분리, band-decoupled wavelet "
+        "loss를 결합합니다. 추가되는 학습 파라미터는 6.22 M 입니다.\n\n"
+        "세 개의 headline 숫자로 본 연구의 기여를 요약하겠습니다.\n\n"
+        "첫째 — temporal consistency. In-domain REDS4에서 tLPIPS가 62.9% "
+        "감소 했습니다.\n\n"
+        "둘째 — frequency-domain fidelity. Ground truth 대비 high-frequency "
+        "spectral power retention이 0.693으로, StableVSR의 0.341 대비 두 "
+        "배 이상입니다.\n\n"
+        "셋째 — parameter efficiency. Frequency Encoder는 6.22 M으로 "
+        "ControlNet의 약 3%에 불과하고, 사전학습된 U-Net과 VAE는 학습 "
+        "내내 frozen으로 유지되므로 generative prior가 그대로 보존 됩니다."
     ))
 
 
@@ -1733,22 +1930,21 @@ def slide_future_work(prs):
 
     items = [
         (1, "Flow-free pipeline",
-         "Replace RAFT-based warping with a frequency-aware temporal "
-         "conditioning module — fully remove optical-flow dependency."),
+         "ControlNet의 RAFT warping을 frequency-aware temporal module로 "
+         "교체 — optical-flow 의존성 완전 제거."),
         (2, "Combine with DGAF-VSR",
-         "Frequency conditioning is orthogonal to OGWM + FTCM "
-         "feature-domain warping — natural fusion for cross-dataset gains."),
+         "Frequency-domain conditioning ⟂ feature-domain warping — 두 "
+         "방향이 orthogonal해 fusion 시 cross-dataset 개선 기대."),
         (3, "Broader training mixture",
-         "Train on REDS + Vimeo-90K with degradation-aware augmentation "
-         "to narrow the OOD gap on Vid4-style content."),
+         "REDS + Vimeo-90K 학습 · degradation-aware augmentation — Vid4 "
+         "같은 OOD에서의 gap 완화."),
         (4, "Latent-space wavelet analysis",
-         "Operate the wavelet loss in latent space; explore adaptive band "
-         "partitioning — reduces VAE-decoding overhead."),
-        (5, "Short-sequence temporal regularization",
-         "Add lightweight modules (flow-guided latent warping / multi-frame "
-         "attention) without compromising parameter efficiency."),
+         "Wavelet loss를 latent space에서 수행 · adaptive band partitioning "
+         "— VAE-decoding overhead 감소."),
+        (5, "Short-sequence temporal reg.",
+         "Flow-guided latent warping / multi-frame attention 같은 "
+         "경량 module 추가 — UDM10 flicker 해결."),
     ]
-    # 5 cards in 3+2 arrangement
     for i, (n, h, body) in enumerate(items):
         if i < 3:
             x = 0.55 + i * 4.16
@@ -1757,51 +1953,116 @@ def slide_future_work(prs):
             x = 2.65 + (i - 3) * 4.16
             y = 4.0
         w, ht = 4.0, 2.85
-        add_card(s, x, y, w, ht, fill=WHITE, line=LIGHT_GRAY)
-        add_accent_strip(s, x, y, w, accent, thickness=0.06)
-        nb = slide_number_box(s, x + 0.18, y + 0.18, 0.5, 0.5,
-                               number=n, color=accent)
-        tb = add_textbox(s, x + 0.85, y + 0.18, w - 1.0, 0.55)
-        add_para(tb.text_frame, h, size=12.5, bold=True, color=accent)
-        body_tb = add_textbox(s, x + 0.18, y + 0.85, w - 0.32, ht - 1.0)
-        add_para(body_tb.text_frame, body, size=11, color=MUTED_INK)
+        stripe_card(s, x, y, w, ht, accent=accent)
+        tb = add_textbox(s, x + 0.2, y + 0.18, w - 0.4, ht - 0.36)
+        add_para(tb.text_frame, f"{n}.  {h}", size=13, bold=True, color=accent)
+        add_para(tb.text_frame, body, size=11, color=MUTED_INK,
+                  space_before=8)
 
     set_notes(s, (
-        "Five future directions.\n\n"
-        "One — a fully flow-free pipeline. Replace the RAFT-based optical-"
-        "flow warping in the ControlNet branch with a frequency-aware "
-        "temporal conditioning module, eliminating optical-flow "
-        "dependency entirely.\n\n"
-        "Two — combine our frequency-domain conditioning with DGAF-VSR's "
-        "feature-domain warping. The two are orthogonal — frequency vs. "
-        "feature, what-to-inject vs. where-to-inject — so fusion is a "
-        "natural candidate for cross-dataset performance.\n\n"
-        "Three — broader training data mixture, REDS plus Vimeo-90K, plus "
-        "degradation-aware augmentation to narrow the gap on Vid4-style "
-        "out-of-distribution content.\n\n"
-        "Four — latent-space wavelet analysis to reduce the VAE-decoding "
-        "overhead of the wavelet loss.\n\n"
-        "Five — lightweight temporal regularization to address the short-"
-        "sequence flicker on UDM10 without compromising parameter "
-        "efficiency.\n\n"
-        "Thank you. I'm happy to take questions."
+        "마지막으로 future work 다섯 가지를 제시합니다.\n\n"
+        "첫째 — flow-free pipeline. ControlNet에서 사용하는 RAFT 기반 "
+        "optical flow warping을 frequency-aware temporal module로 교체 — "
+        "optical flow 의존성을 완전히 제거할 수 있습니다.\n\n"
+        "둘째 — DGAF-VSR과의 결합. 본 연구의 frequency-domain conditioning과 "
+        "DGAF의 feature-domain warping은 orthogonal한 두 축이므로, "
+        "fusion 시 cross-dataset 성능 개선이 기대됩니다.\n\n"
+        "셋째 — 광범위한 training mixture. REDS와 Vimeo-90K 혼합 학습, "
+        "그리고 degradation-aware augmentation으로 OOD gap을 완화할 수 "
+        "있습니다.\n\n"
+        "넷째 — latent-space wavelet analysis. Wavelet loss를 pixel "
+        "space가 아닌 latent space에서 수행하고 adaptive band partitioning "
+        "을 적용하면 VAE-decoding overhead를 크게 줄일 수 있습니다.\n\n"
+        "다섯째 — short-sequence temporal regularization. 가벼운 flow-guided "
+        "latent warping이나 multi-frame attention 같은 module을 추가해 "
+        "UDM10에서 관찰된 flicker 문제를 해결할 수 있습니다.\n\n"
+        "이상으로 발표를 마칩니다. 경청해 주셔서 감사합니다. 질문 부탁드립니다."
     ))
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Speaker notes for the *existing* (template-supplied) content slides
-# ──────────────────────────────────────────────────────────────────────────
-def notes_existing(prs):
-    """Attach speaker notes to the 9 hand-styled template slides too."""
-    # After build_v2 the template slides may not all be present in their
-    # original positions, so we find them by their distinctive shape pattern.
-    # Simpler — apply notes after reordering, by final slide index.
-    pass
+# ══════════════════════════════════════════════════════════════════════════
+# Notes for the existing template slides (post-reorder, 0-indexed)
+# ══════════════════════════════════════════════════════════════════════════
+NOTES_EXISTING = {
+    # 0-indexed positions for template slides in the final order
+    9: (  # Architecture diagram (template slide 2)
+        "이 슬라이드는 제안 framework의 전체 architecture를 보여줍니다.\n\n"
+        "Panel (a) — inference pipeline 전체 입니다. LR 입력이 VAE encoder "
+        "를 거쳐 latent space로 들어가고, U-Net이 diffusion denoising을 "
+        "수행합니다. Temporal scaffold는 StableVSR를 그대로 계승했습니다 — "
+        "ControlNet이 이전에 denoise된 이웃 프레임의 x̂_0를 RAFT optical "
+        "flow로 warping해서 받습니다.\n\n"
+        "새로 추가된 부분은 Wavelet Conditioning Module — WCM 입니다. "
+        "WCM은 DT-CWT decomposition, Frequency Encoder, 그리고 BD-SFT "
+        "injection으로 구성됩니다. 파란색으로 표시된 HIGH band modulation은 "
+        "up_blocks[1] 즉 U-Net decoder에 들어가고, 빨간색으로 표시된 "
+        "LOW band modulation은 down_blocks[1] 즉 encoder에 들어갑니다.\n\n"
+        "Panel (b) — Frequency Encoder의 내부 입니다. 4개의 SubbandBlock "
+        "이 있는데, 각각 DT-CWT scale L=1부터 4까지에 대응합니다. 다음 "
+        "슬라이드에서 SubbandBlock 내부 detail을 다룹니다."
+    ),
+    12: (  # SubbandBlock diagram (template slide 3)
+        "SubbandBlock 내부 — 논문에서는 PerLevelProcessor라고도 부릅니다.\n\n"
+        "하나의 DT-CWT scale에서 추출한 6개 방향의 complex coefficient를 "
+        "입력으로 받습니다. 두 개의 parallel branch — Magnitude Encoding과 "
+        "Phase Encoding이 동일한 operator 시퀀스 (DWConv → SiLU → Spatial "
+        "Attention → Conv-1x1)를 거쳐 처리됩니다.\n\n"
+        "Recombination 단계에서 magnitude branch의 출력을 phase encoding "
+        "의 cos과 sin과 element-wise 곱해 complex 임베딩의 real부와 "
+        "imaginary부를 만듭니다. 이걸 magnitude와 함께 concatenate해 "
+        "192 채널 feature가 되고, 두 개의 SFT head가 (γ, β) modulation "
+        "parameter를 출력합니다.\n\n"
+        "Identity-preserving initialization 덕분에 학습 시작 시점에는 "
+        "wrapped U-Net이 원래 U-Net과 동일하게 동작하고, 학습이 진행되며 "
+        "frequency-domain modulation을 점진적으로 학습합니다."
+    ),
+    21: (  # Evaluation visualization overview (template slide 4)
+        "이 슬라이드는 본 연구의 qualitative 결과 종합 비교 입니다.\n\n"
+        "왼쪽부터 Ours Evaluation, Ablation Study, Comparison, Frequency "
+        "Average 영역으로 구성되어 있습니다. 본 방법은 StableVSR baseline "
+        "보다 sharper texture와 cleaner edge를 보입니다 — 특히 repeated "
+        "pattern이나 high-contrast structure 영역에서 frequency-domain "
+        "conditioning이 spatial-domain ControlNet branch를 보완하는 효과가 "
+        "확인됩니다."
+    ),
+    22: (  # LR subband visualization (template slide 5)
+        "이 슬라이드는 LR 입력 이미지에 대한 DT-CWT subband 시각화 "
+        "입니다.\n\n"
+        "각 scale에서 ±15°, ±45°, ±75° 의 6개 directional subband의 "
+        "magnitude를 보여줍니다. DT-CWT의 directional selectivity가 "
+        "시각적으로 확인됩니다 — 각 subband는 해당 방향의 edge 에만 "
+        "강하게 반응합니다. 이 directional richness가 decoder에서 "
+        "directionally coherent한 HF detail 합성을 가능하게 합니다."
+    ),
+    23: (  # GT subband visualization (template slide 6)
+        "이 슬라이드는 ground-truth HR 이미지에 대한 DT-CWT subband "
+        "시각화 입니다.\n\n"
+        "LR 대비 HR subband는 high-frequency content가 더 풍부하고 "
+        "directional structure가 더 명확합니다. 본 연구의 wavelet loss는 "
+        "예측된 subband를 이 GT subband와 매칭시키도록 supervision을 "
+        "제공합니다."
+    ),
+    24: (  # Radial spectrum (template slide 7)
+        "REDS4에서의 frequency-domain 분석 결과 입니다. Ground truth 대비 "
+        "각 방법의 radial power spectrum 비율을 측정했습니다.\n\n"
+        "세 가지 발견이 있습니다. 첫째 — 저주파에서는 모든 방법이 GT와 "
+        "거의 일치 합니다. 둘째 — 중간 주파수에서는 본 방법이 비율 1에 "
+        "거의 근접하지만 BasicVSR++와 StableVSR는 0.64 정도로 떨어집니다. "
+        "셋째 — 고주파 영역에서 차이가 가장 큽니다. 본 방법은 GT 대비 "
+        "0.69의 power retention을 보이지만 StableVSR는 0.34에 불과 — "
+        "두 배 이상의 차이 입니다.\n\n"
+        "이 frequency-domain 분석이 본 연구의 핵심 가설을 직접적으로 "
+        "검증합니다 — HIGH band DT-CWT coefficient를 decoder로, LOW "
+        "band를 encoder로 routing하는 설계가 pixel-level loss가 잡지 "
+        "못하는 spectral content를 효과적으로 보존합니다."
+    ),
+    30: (  # Thanks
+        "이상으로 발표를 마칩니다. 경청해 주셔서 감사합니다.\n\n"
+        "질문 받겠습니다."
+    ),
+}
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Reorder helper
-# ──────────────────────────────────────────────────────────────────────────
 def reorder_slides(prs, new_order):
     sldIdLst = prs.slides._sldIdLst
     children = list(sldIdLst)
@@ -1812,164 +2073,77 @@ def reorder_slides(prs, new_order):
         sldIdLst.append(children[idx])
 
 
-# Notes for the existing template slides — keyed by *0-indexed* final position.
-# These keys correspond to template-supplied slides only; new content slides
-# already received their notes via their own builder functions.
-#   0  Cover                       (own notes)
-#   1  Contents                    (own notes)
-#   ...
-#   7  Architecture (template)     ← key 7
-#   9  SubbandBlock (template)     ← key 9
-#  18  Eval overview (template)    ← key 18
-#  19  LR subbands (template)      ← key 19
-#  20  GT subbands (template)      ← key 20
-#  21  Radial spectrum (template)  ← key 21
-#  27  Thanks (template)           ← key 27
-NOTES_EXISTING_BY_FINAL_IDX = {
-    7: (
-        "This is the overall architecture of the proposed framework.\n\n"
-        "Panel (a) — the full inference pipeline. The LR input goes through "
-        "the VAE encoder into latent space, where the U-Net performs "
-        "diffusion denoising. The temporal scaffold is inherited from "
-        "StableVSR: a ControlNet receives the RAFT-warped x̂_0 prediction "
-        "of the previously denoised neighbor frame.\n\n"
-        "What's new is the Wavelet Conditioning Module — the WCM — which "
-        "consists of DT-CWT decomposition, the Frequency Encoder, and the "
-        "BD-SFT injection. HIGH-band modulation (blue) goes into "
-        "up_blocks[1] of the U-Net decoder; LOW-band modulation (red) "
-        "goes into down_blocks[1] of the encoder.\n\n"
-        "Panel (b) — the Frequency Encoder. It contains four "
-        "SubbandBlocks, one per DT-CWT scale L=1 through 4. The detailed "
-        "internals come in the next slide."
-    ),
-    9: (
-        "Zooming into one SubbandBlock — the PerLevelProcessor.\n\n"
-        "The block takes the six high-pass complex coefficients of one "
-        "DT-CWT scale. They go through the Magnitude Encoding branch and "
-        "the Phase Encoding branch in parallel — each is "
-        "DWConv → SiLU → Spatial Attention → Conv-1×1.\n\n"
-        "After recombination — where magnitude is multiplied with the "
-        "cos and sin halves of the phase encoding — the resulting complex "
-        "embeddings are concatenated and passed through two SFT heads "
-        "that emit γ and β. Identity-preserving initialization makes the "
-        "wrapped U-Net behave identically to the original at step zero."
-    ),
-    18: (
-        "Qualitative results overview. The right side shows the proposed "
-        "method's outputs. The left side shows ablation and comparison "
-        "results.\n\n"
-        "Highlights — sharper textural detail and cleaner edges than the "
-        "StableVSR baseline, especially in regions with repeated "
-        "patterns and high-contrast structures, where the frequency-"
-        "domain conditioning provides explicit guidance that complements "
-        "the spatial-domain ControlNet branch."
-    ),
-    19: (
-        "DT-CWT subband visualization for an LR input.\n\n"
-        "Each scale produces six directional subbands oriented at "
-        "approximately ±15°, ±45°, and ±75°. The visualisation makes the "
-        "directional selectivity of DT-CWT explicit — you can see that "
-        "each subband responds to edges of a particular orientation. "
-        "This is the directional richness that drives the high-frequency "
-        "detail synthesis at the decoder."
-    ),
-    20: (
-        "Same DT-CWT subband visualization, this time for the ground-"
-        "truth HR frame. The key observation: HR subbands have richer "
-        "high-frequency content and clearer directional structure than "
-        "LR. The supervision signal in the wavelet loss aligns the "
-        "predicted subbands with these GT subbands."
-    ),
-    21: (
-        "Frequency-domain analysis on REDS4. We compute the radial power "
-        "spectrum ratio of each method's output relative to the ground "
-        "truth.\n\n"
-        "Three observations. First — at low frequencies, all methods "
-        "match the GT closely. Second — at mid frequencies, our method "
-        "maintains ratios close to 1, while BasicVSR++ and StableVSR "
-        "fall to around 0.64. Third — at high frequencies, the gap is "
-        "largest. We retain 0.69 of the GT high-frequency power versus "
-        "StableVSR's 0.34 — more than doubling.\n\n"
-        "This directly validates the core hypothesis: routing HIGH-band "
-        "DT-CWT coefficients to the U-Net decoder and LOW-band coefficients "
-        "to the encoder enables the framework to preserve spectral "
-        "content that pixel-level losses fail to enforce."
-    ),
-    27: (
-        "Thank you for your attention. I'm happy to take questions."
-    ),
-}
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Main
-# ──────────────────────────────────────────────────────────────────────────
 def main():
     prs = Presentation(str(TEMPLATE))
 
-    # 1) Cover & contents
     update_cover(prs)
     update_contents(prs)
 
-    # 2) Add new content slides
-    slide_motivation(prs)              # 9
-    slide_related_work(prs)            # 10
-    slide_contributions(prs)           # 11
-    slide_background_dtcwt(prs)        # 12
-    slide_background_sft(prs)          # 13
-    slide_band_partition(prs)          # 14
-    slide_subbandblock_detail(prs)     # 15
-    slide_bdsft_injection(prs)         # 16
-    slide_training_loss(prs)           # 17
-    slide_experiments_setup(prs)       # 18
-    slide_metrics(prs)                 # 19
-    slide_results_reds4(prs)           # 20
-    slide_results_dm_group(prs)        # 21
-    slide_results_cross_dataset(prs)   # 22
-    slide_ablation(prs)                # 23
-    slide_discussion(prs)              # 24
-    slide_limitations(prs)             # 25
-    slide_conclusion(prs)              # 26
-    slide_future_work(prs)             # 27
+    # New content slides — appended in build order (re-ordered below).
+    # idx in slides after appending: 9 ..
+    slide_motivation(prs)                # 9
+    slide_related_work_paradigms(prs)    # 10
+    slide_related_work_gap(prs)          # 11
+    slide_contributions(prs)             # 12
+    slide_prelim_vsr_diffusion(prs)      # 13
+    slide_prelim_dwt_dtcwt(prs)          # 14
+    slide_prelim_sft(prs)                # 15
+    slide_why_dtcwt(prs)                 # 16
+    slide_band_partition(prs)            # 17
+    slide_subbandblock_detail(prs)       # 18
+    slide_bdsft_injection(prs)           # 19
+    slide_training_loss(prs)             # 20
+    slide_experiments_setup(prs)         # 21
+    slide_metrics(prs)                   # 22
+    slide_results_reds4(prs)             # 23
+    slide_results_dm_group(prs)          # 24
+    slide_results_cross_dataset(prs)     # 25
+    slide_ablation(prs)                  # 26
+    slide_discussion(prs)                # 27
+    slide_limitations(prs)               # 28
+    slide_conclusion(prs)                # 29
+    slide_future_work(prs)               # 30
 
-    # 3) Reorder — interleave existing template slides at the right slots.
-    # Existing template slide indices: 0 Cover, 1 Contents, 2 Architecture,
+    # Existing template slides indices: 0 Cover, 1 Contents, 2 Arch,
     # 3 SubbandBlock, 4 Eval overview, 5 LR subbands, 6 GT subbands,
-    # 7 Eval (radial spectrum), 8 Thanks.
+    # 7 Radial spectrum, 8 Thanks.
     final_order = [
-        0,   # 1. Cover
-        1,   # 2. Contents
-        9,   # 3. Motivation
-        10,  # 4. Related Work
-        11,  # 5. Contributions
-        12,  # 6. Background · DT-CWT
-        13,  # 7. Background · SFT
-        2,   # 8. Architecture (template)
-        14,  # 9. Multi-Scale / band partition
-        3,   # 10. SubbandBlock (template)
-        15,  # 11. SubbandBlock detail
-        16,  # 12. BD-SFT Injection
-        17,  # 13. Training Loss
-        18,  # 14. Datasets & Setup
-        19,  # 15. Metrics
-        20,  # 16. REDS4 vs StableVSR
-        21,  # 17. REDS4 DM group
-        22,  # 18. Cross-dataset
-        4,   # 19. Evaluation overview (template)
-        5,   # 20. LR subbands (template)
-        6,   # 21. GT subbands (template)
-        7,   # 22. Radial spectrum (template)
-        23,  # 23. Ablation
-        24,  # 24. Discussion
-        25,  # 25. Limitations
-        26,  # 26. Conclusion
-        27,  # 27. Future Work
-        8,   # 28. Thanks
+        0,    # 1. Cover
+        1,    # 2. Contents
+        9,    # 3. Motivation
+        10,   # 4. Related Work — Paradigms
+        11,   # 5. Related Work — Gap
+        12,   # 6. Contributions
+        13,   # 7. Preliminaries · VSR & Diffusion
+        14,   # 8. Preliminaries · DWT → DT-CWT
+        15,   # 9. Preliminaries · SFT
+        2,    # 10. Architecture diagram (template)
+        16,   # 11. Why DT-CWT
+        17,   # 12. Band partitioning
+        3,    # 13. SubbandBlock diagram (template)
+        18,   # 14. SubbandBlock detail
+        19,   # 15. BD-SFT Injection
+        20,   # 16. Training Loss
+        21,   # 17. Datasets & Setup
+        22,   # 18. Metrics
+        23,   # 19. REDS4 vs StableVSR
+        24,   # 20. DM Group
+        25,   # 21. Cross-Dataset
+        4,    # 22. Eval overview (template)
+        5,    # 23. LR subbands (template)
+        6,    # 24. GT subbands (template)
+        7,    # 25. Radial spectrum (template)
+        26,   # 26. Ablation
+        27,   # 27. Discussion
+        28,   # 28. Limitations
+        29,   # 29. Conclusion
+        30,   # 30. Future Work
+        8,    # 31. Thanks
     ]
     reorder_slides(prs, final_order)
 
-    # 4) Attach speaker notes for the original template slides too.
-    for final_idx, note in NOTES_EXISTING_BY_FINAL_IDX.items():
+    # Attach notes to existing template slides at their final positions.
+    for final_idx, note in NOTES_EXISTING.items():
         if final_idx < len(prs.slides):
             set_notes(prs.slides[final_idx], note)
 
