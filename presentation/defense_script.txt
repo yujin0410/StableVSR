@@ -1,0 +1,1338 @@
+════════════════════════════════════════════════════════════════════════════════
+              WC-BD-SFT 학위논문 발표 스크립트 (Master's Thesis Defense)
+                  IT공학과 조유진 · 2026년 5월 14일 (전체 ~25분)
+════════════════════════════════════════════════════════════════════════════════
+
+📌 사용법
+   • 각 슬라이드마다 [목표 시간], [핵심 메시지], [발표 스크립트],
+     [강조 포인트], [Q&A 대비] 가 정리되어 있습니다.
+   • 스크립트는 실제로 말할 내용 그대로 — 표시된 시간 안에 들어가도록 길이를 맞췄습니다.
+   • Method 5장은 가장 깊이 있게 — 노벨티·기여·실험 근거 측면에서 설명.
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 1 — Cover (제목 페이지)
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 15-20초
+🎯 핵심 메시지: 본인 신원 + 논문 제목 + 정중한 인사
+
+📝 발표 스크립트:
+
+"안녕하십니까. 숙명여자대학교 IT공학과 석사과정 조유진입니다.
+
+오늘 발표드릴 석사학위논문의 제목은 — Wavelet-Conditioned Band-Decoupled
+Spatial Feature Transform for Diffusion-Based Video Super-Resolution —
+입니다.
+
+이 연구는 사전학습된 image diffusion model의 generative prior를 보존하면서,
+비디오 초해상화에서 발생하는 temporal flickering 문제를 frequency-domain
+conditioning으로 해결하는 framework을 제안합니다.
+
+발표는 약 20분 정도 소요될 예정이며, 시작하겠습니다."
+
+💡 강조 포인트:
+   • 천천히, 또렷하게 — 첫인상이 중요
+   • "Wavelet-Conditioned Band-Decoupled" 가 길어서 발음 미리 연습할 것
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 2 — Contents (목차)
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 20초
+🎯 핵심 메시지: 발표가 6 섹션으로 구성된다는 안내
+
+📝 발표 스크립트:
+
+"발표는 총 6 섹션으로 진행됩니다.
+
+먼저 Introduction에서 motivation, 관련 연구, 문제 정의, 그리고 본 연구의
+contribution을 소개합니다.
+
+2장 Preliminaries에서는 VSR, Diffusion model, DT-CWT, 그리고 SFT 의
+이론적 배경을 정리합니다.
+
+3장 Method에서는 제안하는 WC-BD-SFT framework — 즉 Wavelet Conditioning
+Module, SubbandBlock, BD-SFT injection, 그리고 학습 loss — 를 자세히
+설명합니다.
+
+4-5장 Experiments에서 in-domain과 out-of-distribution 평가, 그리고
+ablation을 다루고,
+
+마지막 6장 Conclusion에서 limitation과 future work으로 마무리합니다."
+
+💡 강조 포인트:
+   • 손가락으로 짚지 말고 시선으로 따라가게 유도
+   • Method가 핵심임을 은연중에 암시
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 3 — Introduction (1/8) · Motivation · 4 Applications
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 45초
+🎯 핵심 메시지: VSR이 실제 응용 도메인에서 폭넓게 쓰이며, video 특유의
+   temporal consistency 제약이 존재
+
+📝 발표 스크립트:
+
+"먼저 motivation입니다. VSR — Video Super-Resolution — 은 저해상도 영상을
+고해상도로 복원하는 기술이고, 이미 다양한 산업 도메인에 적용되고 있습니다.
+
+네 가지 대표 응용을 보여드리면, 첫째 surveillance — CCTV 같은 저화질 영상에서
+얼굴이나 번호판을 식별 가능한 해상도로 복원합니다.
+
+둘째 remote sensing — 위성·항공 영상의 광범위 저해상도 촬영에서 구조물 단위의
+detail을 분석 가능한 수준으로 끌어올립니다.
+
+셋째 medical imaging — MRI나 CT의 빠른 촬영을 위한 저해상도 영상을 fine
+structure 분석이 가능한 수준으로 복원해 진단 보조에 활용됩니다.
+
+넷째 autonomous driving — 멀리 떨어진 traffic sign이나 보행자를 detection
+가능한 해상도로 복원해 인식 안정성을 높입니다.
+
+이 모든 응용에서, video VSR이 single-image SR과 다른 점은 — 인접 프레임 간의
+temporal consistency를 추가로 요구한다는 것입니다. 이게 본 연구가 다루는
+핵심 제약입니다."
+
+💡 강조 포인트:
+   • 산업적 의미 강조 — 학술 연구뿐 아니라 실용 가치
+   • 마지막 빨간 줄 "uniquely hard constraint: temporal consistency" 가
+     이번 발표의 핵심 키워드라는 점 부각
+
+⚠️  Q&A 대비:
+   Q: "산업에선 real-world VSR이 더 쓰이지 않나요?"
+   A: "맞습니다. 산업 deployment는 real-world VSR이 대부분이고, 본 연구는
+       mechanism-level 검증을 위해 bicubic VSR로 통제했습니다. 두 트랙은
+       서로 다른 목적이고, 본 연구의 frequency-domain conditioning은
+       degradation type과 orthogonal하므로 real-world 확장이 자연스러운
+       future work입니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 4 — Introduction (2/8) · Motivation · Before/After Demo
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 30초
+🎯 핵심 메시지: VSR의 시각적 효과를 한눈에 보여주기
+
+📝 발표 스크립트:
+
+"VSR의 효과를 직관적으로 보여드리면, 이 슬라이드 — 왼쪽이 저해상도 입력,
+오른쪽이 super-resolution 결과입니다.
+
+같은 거리 풍경인데, 왼쪽은 자동차 윤곽이 흐릿하고 멀리 있는 보행자나
+간판 detail이 거의 보이지 않습니다. 오른쪽은 나뭇잎 하나하나, 자동차의
+edge, 사람의 옷차림까지 선명하게 복원되었습니다.
+
+이런 perceptual quality 향상이 본 연구의 핵심 목표입니다. 단순히 픽셀
+정확도가 아닌 — 인간이 실제로 보았을 때 사실적인 detail이 복원되는지가
+중요합니다."
+
+💡 강조 포인트:
+   • 짧고 강렬하게 — 한 번 본 후 빠르게 넘어감
+   • "perceptual quality" 키워드 깊이 박기
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 5 — Introduction (3/8) · Video SR Evolution + BasicVSR++
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분
+🎯 핵심 메시지: VSR이 CNN regression → GAN → Diffusion으로 진화해왔고,
+   CNN paradigm 대표는 BasicVSR++
+
+📝 발표 스크립트:
+
+"VSR 분야는 2016년 이후 큰 흐름의 변화를 거쳤습니다.
+
+위 timeline을 보시면 — 초창기에는 CNN-based 모델, 즉 VSRnet, SPMC, DUF
+같은 방법들이 있었고, 2018년경부터 motion compensation과 alignment에
+초점을 둔 EDVR, TDAN 같은 방법이 등장했습니다.
+
+2021년 BasicVSR이 bidirectional recurrent propagation으로 큰 도약을 했고,
+이후 BasicVSR++, VRT 같은 transformer-based 방법까지 발전했습니다.
+
+2023년부터 diffusion-based VSR이 본격적으로 등장 — StableVSR, MGLD-VSR,
+DGAF-VSR 같은 방법들이 perceptual quality 측면에서 SOTA를 갱신했고,
+2025년에는 DiffVSR, SeedVR, STAR 같은 후속 연구가 활발히 진행 중입니다.
+
+아래 그림은 BasicVSR++ 의 구조입니다. CNN paradigm 대표 모델로, second-order
+grid와 flow-guided deformable alignment를 사용해 bidirectional하게 시간
+정보를 전파합니다. REDS benchmark에서 CNN paradigm SOTA였고, 본 연구의
+비교 baseline 중 하나입니다.
+
+하지만 CNN regression 모델 공통의 한계가 있습니다 — pixel-wise L1/L2 loss
+로 학습하기 때문에 결과가 over-smoothing 되어 perceptual realism이
+떨어집니다. 이게 diffusion으로 전환되는 동기였습니다."
+
+💡 강조 포인트:
+   • Timeline의 색깔 구분 (CNN/Motion/Recurrent/Diffusion) 시선 유도
+   • BasicVSR++ 가 "CNN paradigm 비교 reference"라는 점 명시
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 6 — Introduction (4/8) · Diffusion VSR (StableVSR/Upscale/DGAF)
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초
+🎯 핵심 메시지: 본 연구의 baseline은 StableVSR. DGAF-VSR이 가장 강한
+   diffusion 비교 대상.
+
+📝 발표 스크립트:
+
+"이제 diffusion 기반 VSR을 자세히 보겠습니다. 세 가지 대표 모델을
+정리했습니다.
+
+첫째, StableVSR — ECCV 2024에서 발표된 방법으로, 본 연구의 직접 baseline
+입니다. Stable Diffusion v2.1을 ControlNet으로 video VSR에 adapt 시키는
+구조이고, 핵심은 Temporal Conditioning Module입니다. 매 denoising step
+에서 이전 프레임의 x̂₀ 예측을 RAFT optical flow로 현재 프레임에
+warping해서 ControlNet input으로 제공합니다. 그리고 forward / backward
+방향을 번갈아 적용하는 frame-wise bidirectional sampling으로 temporal
+consistency를 강화합니다.
+
+둘째, Upscale-A-Video — 같은 CVPR 2024에 발표됐는데, 다른 접근입니다.
+Stable Diffusion에 temporal attention layer를 U-Net과 VAE 양쪽에 추가하고,
+flow-guided latent propagation으로 global consistency를 잡습니다. 또한
+LLaVA로 생성한 text prompt를 conditioning으로 사용합니다. 본 연구와는
+다른 paradigm — text-conditioned video-native diffusion 입니다.
+
+셋째, DGAF-VSR — CVPR 2026에 발표된 가장 최근의 diffusion VSR이고,
+본 연구의 가장 강한 비교 대상입니다. 두 가지 핵심 module이 있습니다.
+OGWM (Optical-Guided Warping Module) 은 고해상도 feature alignment를
+담당하고, FTCM (Feature-wise Temporal Condition Module) 은 dense feature-
+domain temporal guidance를 제공합니다.
+
+세 모델의 공통 패턴 — 모두 optical-flow warping에 의존합니다. 그리고
+바로 이게 한계로 이어집니다. Flow estimation은 복잡한 motion이나 occlusion
+에서 fragile해서, 그 오류가 temporal conditioning에 그대로 propagate 됩니다."
+
+💡 강조 포인트:
+   • StableVSR이 직접 baseline임을 명확히
+   • DGAF-VSR이 closest comparator
+   • "모두 optical-flow에 의존" → 본 연구의 차별점 복선
+
+⚠️  Q&A 대비:
+   Q: "Upscale-A-Video는 왜 평가표에 일부만 포함됐나요?"
+   A: "다른 학습 데이터 corpus를 사용하고, 메모리가 매우 큰 multi-stage
+       pipeline (LLaVA-7B + diffusion VAE + RAFT) 이라 본 evaluation
+       환경 (RTX A6000 48GB) 에서 UDM10, SPMCS는 완료하지 못했습니다.
+       Vid4에서만 평가해 cross-paradigm reference로 제시했습니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 7 — Introduction (5/8) · Frequency Analysis · Temporal Flicker
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 50초
+🎯 핵심 메시지: Diffusion VSR의 flicker 문제 시각화 + CNN의 over-smoothing
+   문제도 같이 짚기
+
+📝 발표 스크립트:
+
+"본 연구가 다루는 핵심 문제 — temporal flickering — 을 시각적으로 보여드립니다.
+
+위 두 행은 RealBasicVSR과 StableSR이 같은 장면을 4 프레임에 걸쳐 처리한
+결과입니다. 같은 건물 표면인데, 자세히 보시면 프레임마다 texture detail이
+어른거리며 일관되지 않게 합성되는 걸 확인할 수 있습니다.
+
+이건 본질적으로 — 각 프레임이 독립적으로 stochastic denoising을 거치기
+때문에, high-frequency detail이 frame 간 inconsistent하게 합성되는 현상입니다.
+
+아래 줄은 단일 프레임 비교입니다. Bicubic upsampling은 흐릿하고, Real-ESRGAN
+과 StableSR은 sharper지만 frame 간 일관성이 부족합니다. RealBasicVSR은
+CNN+GAN 기반으로 over-smoothing이 일부 남아있습니다.
+
+본 연구 Ours는 — sharper texture와 frame 간 일관성을 동시에 보여줍니다.
+오른쪽 끝 GT와 가장 가까운 결과입니다.
+
+요약하면 — diffusion VSR은 perceptual realism은 높지만 temporal flicker 문제가
+있고, CNN VSR은 안정적이지만 over-smoothing이 발생합니다. 두 axis를 동시에
+잡는 게 본 연구의 목표입니다."
+
+💡 강조 포인트:
+   • RealBasicVSR / StableSR 비교에서 frame 간 차이 손가락으로 짚어주기
+   • "Ours가 perceptual + temporal 둘 다 해결" 한 줄로 마무리
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 8 — Introduction (6/8) · FCVSR
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 45초
+🎯 핵심 메시지: Frequency-aware video SR 연구는 이미 존재 (FCVSR), 그러나
+   CNN 기반이고 본 연구와는 다른 axis
+
+📝 발표 스크립트:
+
+"Frequency-domain을 활용한 video SR 연구로는 — IEEE TMM 2025에 발표된
+FCVSR이 가장 최근 작입니다.
+
+FCVSR은 CNN 기반 compressed VSR이고, 두 가지 핵심 module을 가집니다.
+첫째 MGAA — Motion-Guided Adaptive Alignment — 는 frequency-domain
+에서 motion offset을 추정해 feature alignment를 수행합니다. 둘째 MFFR
+— Multi-Frequency Feature Refinement — 는 decomposition → enhancement
+→ aggregation 전략으로 high-frequency detail을 복원합니다. 추가로
+frequency-aware contrastive loss를 도입했습니다.
+
+오른쪽 그래프에서 보듯, PSNR 측면에서 BasicVSR++ 같은 CNN 모델보다 향상된
+결과를 보입니다.
+
+하지만 본 연구와 직접 비교가 어려운 이유 — FCVSR은 CNN architecture
+내부에서 frequency를 alignment와 refinement에 사용하고, compressed video
+라는 다른 degradation을 타깃합니다. 본 연구는 diffusion U-Net의
+conditioning signal로 frequency를 사용하는 — 완전히 다른 paradigm입니다.
+
+핵심은 — frequency-aware VSR 연구가 활발하지만, diffusion model에
+frequency conditioning을 주입하는 axis는 본 연구가 처음입니다."
+
+💡 강조 포인트:
+   • FCVSR이 CNN이라는 점 명확히 (diffusion 아님)
+   • 본 연구와 orthogonal한 axis
+
+⚠️  Q&A 대비:
+   Q: "FCVSR과 직접 비교해야 하지 않나요?"
+   A: "FCVSR은 CNN architecture에서 compressed VSR을 다루는 paradigm이고,
+       본 연구는 diffusion model의 conditioning이라 architectural paradigm
+       자체가 달라 직접 PSNR/LPIPS 비교가 의미상 적절하지 않습니다. 향후
+       frequency-conditioning이라는 공통 아이디어 측면에서 함께 묶어
+       다루는 연구가 가능할 것으로 봅니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 9 — Introduction (7/8) · Problem Definition
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초
+🎯 핵심 메시지: 본 연구가 다루는 문제를 5 단계로 명확화
+
+📝 발표 스크립트:
+
+"앞서 본 내용들을 종합해 문제를 정의합니다. 4 단계 구조입니다.
+
+먼저 ① Setup — Given: 사전학습된 image diffusion model, 즉 Stable Diffusion
+v2.1과 그 generative prior를 가집니다. Goal: 이를 video VSR에 확장해
+perceptual realism과 temporal consistency를 동시에 달성하는 것입니다.
+
+② Algorithmic Challenge — 본질적 문제는 — 프레임마다 독립적으로 진행되는
+stochastic denoising이 high-frequency detail을 frame 간 일관되지 않게
+합성한다는 점입니다. 즉 인접 프레임이 macro 구조는 공유하지만 micro
+detail에서 발산하면서 flicker가 발생합니다.
+
+③ What Existing Algorithms Get Wrong — 기존 알고리즘적 결함 세 가지입니다.
+첫째, StableVSR과 DGAF-VSR이 사용하는 optical-flow warping은 complex
+motion, occlusion, degradation에서 fragile합니다. Flow 오류가 conditioning
+신호에 그대로 전파됩니다.
+
+둘째, MWCNN, FTVSR, ResQu, WaveDiT 같은 frequency 기반 방법들은 standard
+DWT를 쓰는데, DWT는 critical decimation 때문에 shift-variant합니다.
+Sub-pixel motion만으로 wavelet coefficient가 흔들려서 오히려 flicker를
+악화시킵니다.
+
+셋째, diffusion + frequency 연구들 — ResQu, WaveDiT — 는 모두
+single-image SR만 다루고 temporal 축은 모델링하지 않습니다.
+
+④ What Existing Approaches Sacrifice — 그 외 접근들은 실용적 비용을
+지불합니다. Stable Video Diffusion이나 Upscale-A-Video 같은 video-native
+diffusion은 수십억 파라미터와 대규모 video corpus가 필요합니다. Full-
+network fine-tuning은 catastrophic forgetting으로 generative prior를
+손상시킬 위험이 있습니다.
+
+이 모든 문제를 해결하려면 — algorithmically principled conditioning이
+필요합니다. 즉 shift-stable, flow-independent, prior-preserving 한 메커니즘.
+다음 슬라이드에서 본 연구의 답을 보여드리겠습니다."
+
+💡 강조 포인트:
+   • 4 단계를 손가락으로 차례로 짚어가며 흐름 유지
+   • 마지막 "algorithmically principled" 키워드 강조
+   • "효율 문제가 아니라 알고리즘 문제" 라는 narrative 살리기
+
+⚠️  Q&A 대비:
+   Q: "기존 방법들이 알고리즘적 결함이라기엔 결과가 잘 나오던데요?"
+   A: "그렇습니다. StableVSR이나 DGAF-VSR도 우수한 결과를 보입니다. 다만
+       제가 강조하는 결함은 — flow 추정이나 standard DWT를 conditioning
+       signal로 사용한다는 architectural 선택의 한계이고, 이건 어떤 dataset
+       에서도 본질적으로 fragile합니다. 본 연구는 그 conditioning signal
+       자체를 shift-stable한 DT-CWT로 교체하는 게 핵심입니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 10 — Introduction (8/8) · Contributions
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분
+🎯 핵심 메시지: 4 가지 contribution을 Problem Definition과 1:1 대응
+
+📝 발표 스크립트:
+
+"앞서 정의한 문제를 풀어내는 본 연구의 contribution 네 가지를 소개드립니다.
+
+첫째 Framework — WC-BD-SFT — 본 연구가 처음 제안하는 framework입니다.
+Shift-stable, flow-independent, prior-preserving conditioning을 동시에
+제공하기 위해 DT-CWT prior를 frozen pre-trained diffusion U-Net에
+asymmetric encoder-decoder로 주입합니다.
+
+둘째 Algorithmic core — 세 가지 algorithmic 결함을 동시에 해결합니다.
+DT-CWT의 Hilbert pair 구조는 near shift-invariance를 보장 — DWT의
+shift-variance 문제를 직접 해결합니다. BD-SFT는 HIGH band를 decoder로,
+LOW band를 encoder로 routing — diffusion + frequency 연구 최초로 video
+temporal 축을 다룹니다. 그리고 magnitude-phase decoupling과 trigonometric
+phase encoding으로 phase의 ±π wraparound 불연속을 회피합니다.
+
+셋째 Prior-preserving by design — U-Net 472M 파라미터와 VAE 55M을 완전히
+freeze합니다. 학습 가능한 부분은 Frequency Encoder 6.22M으로 ControlNet의
+약 3% 입니다. Identity-preserving initialization으로 학습 시작 시점에
+원래 baseline과 동일하게 동작합니다.
+
+넷째 Empirical evidence — REDS4 in-domain에서 tLPIPS 62.9% 감소, LPIPS
+37.5% 감소, high-frequency spectral power retention은 StableVSR 대비 두
+배 이상. DM 그룹 내 9개 metric 중 8개에서 best 입니다."
+
+💡 강조 포인트:
+   • 4개 contribution을 손가락으로 차례로 짚기
+   • "DM 그룹 8/9 metric best" 한 줄로 강한 인상
+   • Problem과 Contribution의 1:1 대응 강조
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 11 — Preliminaries (1/2) · VSR + Diffusion Process
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초
+🎯 핵심 메시지: VSR formulation + diffusion의 forward/reverse process
+
+📝 발표 스크립트:
+
+"Method로 들어가기 전에 두 슬라이드의 preliminaries를 다루겠습니다.
+
+먼저 Video Super-Resolution. 위 식이 degradation model입니다 — HR 영상에
+blur kernel을 convolution하고, scale factor s 만큼 downsampling 후 noise를
+추가한 게 LR이 됩니다. VSR loss는 reconstruction L1과 warping-기반
+temporal regularization의 합으로 구성됩니다.
+
+다음은 diffusion process. Forward process는 정해진 variance schedule β_t로
+T 스텝의 Markov chain에 따라 점진적으로 Gaussian noise를 추가합니다.
+αₜ = 1 − βₜ 와 cumulative product ᾱₜ를 precompute해두면, 임의 시점 t의
+xₜ를 closed-form으로 한 번에 샘플링할 수 있습니다.
+
+Reverse process는 그 반대입니다. 학습 가능한 U-Net이 매 step에서 더해진
+noise ε를 예측하고, 그걸 빼나가면서 x_T → x_0 으로 denoising합니다. Mean
+parameterization은 epsilon-prediction 형태로 정리됩니다.
+
+본 연구의 backbone은 Stable Diffusion v2.1 — 즉 latent diffusion model
+입니다. Diffusion이 VAE-encoded latent z에서 진행되고, conditioning c를
+받아 학습 loss는 ε-MSE 형태가 됩니다. 본 연구는 이 conditioning c 자리에
+DT-CWT 기반 BD-SFT modulation을 새로 주입합니다. 자세한 내용은 Method
+섹션에서 다루겠습니다."
+
+💡 강조 포인트:
+   • 식들을 정확히 가리키며 — "이 식이 forward process입니다" 식으로
+   • 마지막 파란 박스 "This work's backbone" 강조해서 본 연구가 어디에
+     붙는지 명확화
+
+⚠️  Q&A 대비:
+   Q: "왜 Stable Diffusion v2.1을 backbone으로 선택했나요?"
+   A: "두 가지 이유입니다. 첫째, baseline인 StableVSR이 동일한 backbone을
+       쓰므로 matched comparison이 가능합니다. 둘째, SD v2.1은 pre-
+       training된 generative prior가 충분히 강해서 image SR에서 검증된
+       결과를 가지고 있어, video로 확장할 가치가 있습니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 12 — Preliminaries (2/2) · DT-CWT + SFT
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초
+🎯 핵심 메시지: 본 연구의 두 핵심 building block 소개
+
+📝 발표 스크립트:
+
+"두 번째 preliminaries는 본 연구의 핵심 building block 두 가지입니다.
+
+먼저 Dual-Tree Complex Wavelet Transform — DT-CWT 입니다. 두 개의 parallel
+wavelet tree로 구성되어 있고, 두 tree의 filter가 Hilbert-pair를 이룹니다.
+그 결과 complex wavelet은 analytic signal이 되고 — near shift-invariance
+성질을 가집니다. 또한 2D에서 ±15°, ±45°, ±75° 의 6개 directional subband
+를 제공합니다. DWT의 3개에 비해 두 배 풍부한 방향성입니다.
+
+위 수식들은 — ψ_h가 real-tree wavelet, ψ_g가 imaginary-tree wavelet으로
+Hilbert transform 관계입니다. Complex wavelet은 ψ_c = ψ_h + j·ψ_g 로
+정의되고, 2D 확장으로 6 directional subband가 도출됩니다.
+
+다음 Spatial Feature Transform — SFT 입니다. 일반적인 channel concatenation
+은 입력 어디든 같은 변환을 적용하지만, SFT는 spatial 위치마다 다른 affine
+파라미터를 적용합니다. 즉 다른 영역, 다른 변환이 가능합니다.
+
+수식으로는 — condition network M_θ가 prior Ψ로부터 두 modulation map
+(γ, β)을 만들고, 이 두 맵은 feature map F와 동일한 spatial size, channel
+count를 가집니다. SFT 연산은 element-wise multiplication과 addition으로
+정의됩니다.
+
+본 연구는 이 두 도구를 결합 — DT-CWT prior를 SFT modulation으로 U-Net에
+주입하는 게 핵심 아이디어입니다."
+
+💡 강조 포인트:
+   • DT-CWT의 두 핵심 성질 — near shift-invariance + 6 directional
+   • SFT가 channel-wise가 아닌 spatial-wise라는 차별점
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 13 — Method (1/5) · Architecture Overview
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 2분 (★ 핵심 슬라이드)
+🎯 핵심 메시지: 전체 architecture 한 눈에 — WCM이 어디에 어떻게 붙는지
+
+📝 발표 스크립트:
+
+"이제 본 연구의 핵심인 Method 섹션입니다. 5 슬라이드에 걸쳐 자세히 설명드리겠습니다.
+
+먼저 overall architecture입니다. 그림 (a) 가 전체 구조입니다. 크게 세 부분
+으로 나뉩니다.
+
+하단의 Baseline 부분은 StableVSR scaffold 입니다. 현재 프레임 I^LR_t 와
+이전 프레임 I^LR_{t-1} 사이의 optical flow를 RAFT로 추정하고, 이전에
+denoise된 HR 추정치 Î^HR_{t-1} 을 현재 프레임으로 warping합니다.
+이 warped 프레임이 ControlNet의 입력이 되고, ControlNet은 denoising U-Net
+의 down_blocks와 up_blocks에 multi-scale residual을 제공합니다.
+
+가운데 Input 부분은 — bicubic upscale된 LR과 noisy latent z_τ 를 합쳐
+U-Net의 input으로 보냅니다.
+
+여기까지가 StableVSR baseline 그대로입니다.
+
+이제 본 연구가 새로 추가한 부분 — 빨간 점선으로 표시된 Wavelet Conditioning
+Module, WCM 입니다. 좌상단에서 시작합니다.
+
+현재 프레임 I^LR_t 를 DT-CWT 로 분해해서 multi-scale wavelet coefficient를
+얻습니다. 이걸 Frequency Conditioning Encoder가 처리해서 두 개의 SFT
+modulation을 생성합니다 — 위쪽 파란 SFT는 HIGH band 용, 아래쪽 빨간 SFT는
+LOW band 용 입니다.
+
+HIGH band SFT는 U-Net 디코더의 up_blocks[1] 에 주입되어 texture 합성 단계를
+보강하고, LOW band SFT는 인코더의 down_blocks[1] 에 주입되어 structural
+abstraction을 강화합니다.
+
+핵심 — WCM은 **frame 내부의 spatial frequency 정보만** 사용합니다. 시간 축
+정보는 ControlNet branch가 담당하고, WCM은 motion-independent한 conditioning
+입니다. 이게 본 연구가 optical-flow fragility 문제를 회피하는 방식입니다.
+
+최종적으로 U-Net 출력 latent를 VAE로 decode하면 HR 프레임 Î^HR_t 가 나옵니다.
+오른쪽 우상단의 legend에 각 색깔 박스가 어떤 module인지 정리되어 있습니다."
+
+💡 강조 포인트:
+   • 그림을 손가락으로 따라가며 — Baseline → WCM → output 흐름
+   • "WCM은 frame 내부 spatial frequency만 사용 — motion-independent"
+     를 두 번 반복해서 강조
+   • Asymmetric injection (HIGH→decoder, LOW→encoder) 시각적으로 보여주기
+
+⚠️  Q&A 대비:
+   Q: "ControlNet은 그대로 두고 왜 또 WCM을 추가하나요? 중복 아닌가요?"
+   A: "두 모듈이 서로 다른 신호를 처리합니다. ControlNet은 시간 축 — 즉
+       이웃 프레임의 warped 정보를 처리하고, WCM은 공간 축 — 현재 프레임의
+       frequency 정보를 처리합니다. 두 신호는 orthogonal하고 상호 보완적
+       입니다. 실제로 ablation에서 WCM 없이 ControlNet만 두면 — 즉
+       StableVSR — 성능이 크게 떨어집니다. 이건 ablation 슬라이드에서
+       확인하실 수 있습니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 14 — Method (2/5) · WCM + SubbandBlock Detail
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 2분 30초 (★★ 가장 중요한 슬라이드)
+🎯 핵심 메시지: WCM 내부 — SubbandBlock의 magnitude/phase 분리 처리
+
+📝 발표 스크립트:
+
+"이번에는 WCM 내부를 자세히 보겠습니다. 두 panel 입니다 — (b) WCM 전체
+구조, (c) SubbandBlock 단일 처리.
+
+(b) WCM 전체 — LR 프레임이 DT-CWT로 4 level 분해됩니다. L=1, L=2 는 fine
+scale (high frequency), L=3, L=4 는 coarse scale (low frequency)입니다.
+각 level마다 6 high pass subband와 lowpass LL이 나옵니다.
+
+각 level의 6 high pass coefficient가 SubbandBlock 으로 들어가서 modulation
+embedding을 생성합니다. L=1, L=2의 출력은 합쳐져서 HIGH band SFT를 형성하고,
+L=3, L=4의 출력은 합쳐져서 LOW band SFT를 형성합니다. 이게 BD-SFT 의 'BD'
+— Band-Decoupled 라는 이름의 유래입니다.
+
+이제 (c) — SubbandBlock 내부 — 가 본 연구의 핵심 novelty입니다. 한 level의
+6 directional high-pass complex coefficient를 두 branch로 분리합니다.
+
+Magnitude branch (위쪽 파란색) — complex coefficient의 magnitude M = √(a²+b²)
+을 계산합니다. 6 방향 × 3 RGB = 36 채널이 DW conv → SiLU → Spatial
+Attention → 1×1 conv 로 처리되어 e_M, 64 채널 magnitude embedding이
+나옵니다.
+
+Phase branch (아래쪽 초록색) — 여기가 핵심입니다. Phase를 직접 처리하면
+±π 경계에서 2π wraparound 불연속이 생겨 conv layer가 망가집니다.
+
+해결책 — phase를 (sin φ, cos φ) pair로 표현 — 즉 unit circle 위의 두 좌표로.
+이러면 어떤 angle이든 연속적입니다. sin과 cos 두 채널을 channel-wise
+concat해서 36 채널 input이 되고, 같은 DW conv → SiLU → SA → 1×1 conv
+파이프라인으로 처리해서 128 채널 phase embedding이 나옵니다.
+
+이 128 채널을 다시 split해서 e_sin (64ch), e_cos (64ch) 두 부분으로 나눕니다.
+
+Recombination 단계 — 이게 흥미로운 부분입니다. e_M ⊙ e_cos = e_real,
+e_M ⊙ e_sin = e_imag — 즉 polar-to-Cartesian 관계 R·e^(jφ) = R·cosφ +
+j·R·sinφ 를 embedding space에서 그대로 재현합니다. 이 두 결과를 e_M과
+함께 concat하면 192 채널 final feature f(j) 가 됩니다.
+
+마지막으로 SFT_γ 와 SFT_β 두 헤드 — 각각 3×3 → SiLU → 3×3 — 가 modulation
+파라미터 γ와 β를 256 채널로 출력합니다. SFT 연산은 X' = X ⊙ γ + β.
+
+요약하자면 — 이 SubbandBlock 디자인의 novelty는 두 가지입니다. 첫째,
+magnitude와 phase를 **분리해서 처리**합니다 — 두 신호의 통계적 성질이 다르기
+때문입니다. 둘째, phase를 (sin, cos) 두 좌표로 인코딩해 wraparound 불연속
+을 **architecturally 회피**합니다. 두 처리 결과를 polar-to-Cartesian으로
+재결합해 complex 구조를 embedding 공간에서 보존합니다."
+
+💡 강조 포인트:
+   • Magnitude vs Phase 두 branch를 손가락으로 분리해서 짚기
+   • "wraparound 불연속" 키워드 강조 — 청중이 처음 듣는 개념일 수 있음
+   • "polar-to-Cartesian" 재현이 본 연구의 디자인 미학 — 강조
+   • 채널 수 (36 → 64 → 128 → 192 → 256) 흐름을 명확히
+
+⚠️  Q&A 대비:
+   Q: "sin과 cos을 concat한 후 다시 분리하는데, 왜 분리하지 않고 처음부터
+       함께 처리하면 안 되나요?"
+   A: "좋은 질문입니다. 두 가지 분리가 서로 다른 차원입니다. Magnitude와
+       Phase는 통계적으로 다른 신호 — 그래서 별도 branch에서 specialize.
+       sin과 cos은 한 phase의 두 좌표 — 같은 phase 정보를 unit circle에
+       매핑한 표현이라 함께 처리해야 phase를 표현할 수 있습니다.
+       Recombination에서 분리하는 건 — magnitude 와 element-wise 곱해서
+       complex 구조의 real / imag 부분을 따로 만들기 위함입니다.
+
+   Q: "DW conv를 쓰는 이유는?"
+   A: "Depthwise separable convolution이라 채널별로 독립적인 spatial filter
+       학습 — 즉 6 directional subband 각각에 대한 spatial pattern을 따로
+       학습할 수 있고, 파라미터 efficient합니다."
+
+   Q: "ε = 1e-8은 무슨 의미?"
+   A: "M = √(a²+b²) 이 0에 가까운 flat region에서 cos = a/M, sin = b/M
+       을 계산할 때 0으로 나누기 방지용입니다. Float32 machine precision
+       기준으로 충분히 작아서 normal region에서는 영향이 거의 없습니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 15 — Method (3/5) · Why DT-CWT
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초 (★ Novelty 정당화)
+🎯 핵심 메시지: DT-CWT 선택의 3가지 근거 (Hilbert pair, 6 directions, magnitude/phase)
+
+📝 발표 스크립트:
+
+"본 연구가 standard DWT나 Fourier가 아닌 DT-CWT를 선택한 세 가지 근거입니다.
+
+상단 식 — 4-level DT-CWT 분해 결과입니다. LR 프레임 I^LR_t 를 분해하면
+lowpass component I^t_LP 와 4 level × 6 direction = 24 개의 complex
+high-pass coefficient C^(j,d) 가 나옵니다. j는 scale, d는 direction
+입니다.
+
+첫째 — Near shift-invariance. 이게 가장 중요한 성질입니다. DT-CWT
+magnitude는 sub-pixel translation에 대해 approximately stable합니다.
+즉 video의 인접 프레임 사이에 sub-pixel 단위 motion이 있어도 wavelet
+coefficient가 비슷하게 유지됩니다. 반면 DWT는 critical decimation
+때문에 같은 sub-pixel shift에서도 coefficient가 크게 흔들립니다.
+이건 video conditioning에 치명적인 단점입니다.
+
+둘째 — Six directional subbands. DT-CWT는 ±15°, ±45°, ±75° 의 6 방향
+선택성을 가집니다. DWT의 3 방향에 비해 두 배입니다. 머리카락, 잎사귀,
+직물 같은 자연 texture는 임의 방향의 edge를 가지는데, DT-CWT가 이 방향성을
+훨씬 풍부하게 표현합니다. Decoder에서 oriented HF detail을 합성할 때 결정적
+입니다.
+
+셋째 — Complex coefficient의 magnitude/phase 분해. C = a + jb 에서
+magnitude M = √(a²+b²) 는 shift-stable energy descriptor — texture 정보
+입니다. Phase φ = ∠C 는 precise spatial localization — structure 정보
+입니다. 이 두 정보는 통계적 성질이 달라서 분리 처리가 유리하고, 본 연구의
+BD-SFT pathway에 직접 대응됩니다.
+
+세 가지 성질이 합쳐져서 — DT-CWT가 video diffusion VSR의 conditioning에
+이상적인 도구라는 결론에 이릅니다."
+
+💡 강조 포인트:
+   • 3 개 숫자 (1, 2, 3) 를 손가락으로 차례로 짚어가기
+   • "Near shift-invariance" 가 가장 중요 — 이 한 성질이 본 연구의 핵심
+   • DWT가 왜 안 되는지 명확히
+
+⚠️  Q&A 대비:
+   Q: "Hilbert pair가 정확히 무슨 의미인가요?"
+   A: "두 wavelet ψ_h 와 ψ_g 가 Hilbert transform 관계 — 즉 ψ_g = H{ψ_h}
+       — 라는 의미입니다. 이렇게 두 wavelet으로 만든 complex wavelet
+       ψ_c = ψ_h + j·ψ_g 는 analytic signal이 되어, Fourier 영역에서
+       positive frequency만 가집니다. 이게 shift-invariance를 가능하게
+       하는 수학적 근거입니다."
+
+   Q: "왜 J=4 level인가요? J=3이나 J=5는?"
+   A: "두 가지 제약입니다. 첫째, U-Net의 down_blocks[1]에 들어가는 SFT의
+       spatial size가 LR의 1/8 입니다. J=4에서 가장 작은 subband (level 4)
+       의 spatial size가 H/16 으로, U-Net feature와 자연스럽게 정렬됩니다.
+       J=5 면 너무 작아져서 upsampling 비용이 커지고, J=3 이면 너무 커서
+       downsampling이 필요합니다. 둘째, 4 scales를 2:2로 분리해서 HIGH/LOW
+       band 각각 2 scales × 256 channels = 512 ch — U-Net의
+       block_out_channels[1] 과 정확히 일치합니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 16 — Method (4/5) · Multi-Scale Decomposition + DTCWT Subband Viz
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분
+🎯 핵심 메시지: 4 scale을 2:2로 분리하는 이유 + 시각화
+
+📝 발표 스크립트:
+
+"이제 multi-scale decomposition의 구체적인 partitioning을 보겠습니다.
+
+4 scale을 j=2와 j=3 사이에서 두 그룹으로 분리합니다. HIGH band ℋ = {j=1, j=2},
+LOW band ℒ = {j=3, j=4} 입니다. 이 2:2 split을 선택한 세 가지 근거입니다.
+
+첫째 — Spectral. LR 신호 spectrum을 정확히 절반으로 분리합니다. j=1, j=2
+는 normalized frequency 1/8 ~ 1/2 cyc/px 의 fine texture, j=3, j=4는
+0 ~ 1/8 cyc/px의 coarse structure를 담당합니다. 각 SFT pathway가
+non-overlapping range에 특화됩니다.
+
+둘째 — Architectural alignment. 2 scales × 256 ch = 512 ch 가 U-Net의
+block_out_channels[1] = 512 와 정확히 일치합니다. 추가 channel projection
+없이 그대로 modulation 가능합니다.
+
+셋째 — J=4 의 결정 이유. j=4 subband의 spatial size H/16 × W/16 이
+SD-VAE의 8× downsampling과 U-Net의 2× downsampling 위에서 자연스럽게
+정렬됩니다.
+
+하단은 실제 DT-CWT subband 시각화입니다. 같은 LR 프레임을 4 scale × 6
+direction 으로 분해한 24 개 magnitude 맵입니다. 위 행이 j=1 (fine
+detail), 아래 행이 j=4 (coarse structure) 입니다.
+
+세로 방향 — j가 증가할수록 (fine → coarse) spatial detail이 단순해지면서
+큰 구조만 남습니다. 가로 방향 — 6 directional subband 각각이 다른 방향의
+edge에 강하게 반응합니다. ±15°, ±45°, ±75° 의 directional selectivity가
+시각적으로 확인됩니다.
+
+오른쪽 확대 — 같은 scene이라도 direction별로 highlight되는 edge가 다른 것을
+볼 수 있습니다. 이 풍부한 directional 정보가 decoder에서 directionally
+coherent한 HF detail 합성을 가능하게 합니다."
+
+💡 강조 포인트:
+   • "2:2 split 의 3가지 근거" 차례로 짚기
+   • 시각화에서 j=1과 j=4의 차이 — 가로로 비교
+   • 6 방향 directional selectivity 강조
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 17 — Method (5/5) · SubbandBlock + BD-SFT Injection
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 2분 (★ BD-SFT injection 근거 정당화)
+🎯 핵심 메시지: SubbandBlock 핵심 트릭 + BD-SFT의 asymmetric injection 3가지 근거
+
+📝 발표 스크립트:
+
+"이번 슬라이드에서 두 가지 주제를 다룹니다.
+
+왼쪽 — SubbandBlock의 핵심 트릭, trigonometric phase encoding 입니다.
+
+수식으로 — 𝒯(φ) = (sin φ, cos φ) — 이건 b/√(M²+ε) 와 a/√(M²+ε) 형태로
+직접 계산할 수 있습니다. arctan 함수를 거치지 않고 polar 관계로 바로
+구합니다.
+
+이 인코딩의 두 가지 핵심 효과 — 첫째, ±π 경계에서 continuous하고 gradient
+stable합니다. φ가 π 근처에서 -π 로 jump해도 sin과 cos은 연속적으로
+변합니다. 둘째, ε = 1e-8 이 flat region에서 M이 0에 가까울 때 수치
+안정화를 보장합니다.
+
+이게 본 연구의 novelty 하나 — phase를 conv 친화적인 표현으로 변환하는
+간단하지만 효과적인 트릭입니다.
+
+오른쪽 — BD-SFT injection 의 asymmetric encoder-decoder modulation 입니다.
+세 가지 디자인 근거가 있습니다.
+
+첫째 — Architectural alignment. U-Net의 block_out_channels이
+[256, 512, 512, 1024] 인데, down_blocks[1] 과 up_blocks[1] 이 모두 512
+channel 입니다. SubbandBlock 출력 (γ, β) 가 정확히 256 ch × 2 scale =
+512 ch — 두 location 모두 추가 projection 없이 그대로 주입 가능합니다.
+
+둘째 — Functional separation. FreeU 라는 2024년 연구가 — diffusion U-Net의
+encoder는 high-frequency를 suppress하고 coarse structure를 consolidate
+하며, decoder는 upsampling으로 high-frequency를 reintroduces 한다고
+밝혔습니다. 즉 encoder = structural abstraction, decoder = HF detail
+synthesis 입니다.
+
+본 연구는 이 functional role과 정확히 align되도록 — LOW band (coarse
+structure 정보)는 encoder에, HIGH band (fine texture 정보)는 decoder
+에 — asymmetric하게 주입합니다. 이건 random choice가 아니라 U-Net 내부
+processing의 의미를 활용한 principled choice입니다.
+
+셋째 — Conservative design. Band 당 single injection — minimal overhead
+입니다. 그리고 두 injection point 모두 identity initialization으로 학습
+시작 시점에 baseline 동작을 그대로 유지합니다.
+
+요약 — BD-SFT injection의 asymmetric 배치는 우연이 아니라 U-Net 내부
+functional role에 의도적으로 align된 디자인입니다. 이게 본 연구의
+또 다른 novelty 입니다."
+
+💡 강조 포인트:
+   • "wraparound 회피" + "FreeU와 align" — 두 키워드 강조
+   • 1, 2, 3 디자인 근거 차례로 짚기
+   • "uncertainty가 아닌 principled choice" 라는 메시지
+
+⚠️  Q&A 대비:
+   Q: "HIGH band를 encoder에, LOW band를 decoder에 넣으면 어떻게 됩니까?"
+   A: "이건 functional alignment를 깨는 ablation에 해당합니다. 본 연구에서
+       직접 비교하지는 않았지만, ablation 슬라이드의 'w/o HIGH' 와
+       'w/o LOW' 결과를 보시면 — HIGH band를 decoder에서 빼면 tLPIPS
+       45% 악화, LOW band를 encoder에서 빼면 MUSIQ 6% 악화 — 각 band가
+       자기 위치에서 specialize되어 있음을 확인할 수 있습니다."
+
+   Q: "FreeU 연구 신뢰성은?"
+   A: "FreeU는 CVPR 2024 oral 발표된 연구로, U-Net의 layer 단위 frequency
+       분석을 통해 encoder의 HF suppression과 decoder의 HF reintroduction
+       을 실험적으로 입증했습니다. 본 연구의 architectural alignment는
+       이 실험적 evidence에 근거를 둡니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 18 — Experiments (1/5) · Datasets
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분
+🎯 핵심 메시지: REDS 학습 + 4 평가 dataset, controlled setup
+
+📝 발표 스크립트:
+
+"이제 실험 부분입니다. 먼저 dataset 입니다.
+
+학습은 REDS dataset의 train split을 사용합니다. NTIRE 2019 video deblurring/SR
+challenge에서 도입된 대규모 데이터셋으로, 720p 고품질 sequence들이
+realistic하고 dynamic한 scene을 포함합니다. BasicVSR / StableVSR 같은
+baseline들이 모두 REDS로 학습된 표준 setup이라, matched comparison이
+가능합니다.
+
+평가는 네 dataset 입니다.
+
+In-domain 평가는 REDS4 — REDS train 240 sequence 중 4개 (clip 000, 011,
+015, 020) 를 reserved test set으로 사용합니다. 같은 distribution이라
+mechanism의 in-distribution generalization을 측정합니다.
+
+Out-of-distribution 평가는 세 dataset — UDM10, Vid4, SPMCS 입니다.
+
+UDM10은 10 sequence × 32 frame의 작은 validation set으로, primarily
+bicubic ×4 입니다. Short static clip이 많습니다.
+
+Vid4는 calendar, city, foliage, walk — 4개의 challenging sequence
+입니다. 720×480 SD 해상도이고 BD (Gaussian blur + downsample) degradation
+까지 포함합니다.
+
+SPMCS는 30 sequence, 각 31 frame 입니다. HD-level 해상도이고 central
+frame PSNR/SSIM 평가에 적합합니다.
+
+이 네 dataset의 다양성 — resolution, motion, degradation 모두 달라서 —
+이 단일 training distribution (REDS) 의 일반화 능력을 다양하게 측정할 수
+있습니다.
+
+하단 그림은 각 dataset의 예시 입니다."
+
+💡 강조 포인트:
+   • REDS-only matched training — baseline과 같은 setup
+   • OOD 세 dataset의 다양성 (resolution, motion)
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 19 — Experiments (2/5) · Evaluation Metrics
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분
+🎯 핵심 메시지: 9 metric × 4 카테고리로 다각도 평가
+
+📝 발표 스크립트:
+
+"평가 지표는 9 개를 4 카테고리로 분류합니다.
+
+먼저 Reconstruction fidelity — PSNR과 SSIM. PSNR은 pixel-level MSE 의
+log scale, SSIM은 local luminance / contrast / structure 유사도입니다.
+둘 다 ↑ 높을수록 좋고, generative model에는 다소 불리한 지표입니다.
+
+Full-reference perceptual — LPIPS와 DISTS. Deep feature 기반 perceptual
+distance입니다. DISTS는 texture variation에 robust해서 generative VSR
+평가에 특히 적합합니다. 둘 다 ↓ 낮을수록 좋습니다.
+
+No-reference perceptual — MUSIQ, CLIP-IQA, NIQE. Reference 없이 quality
+를 평가하는 지표입니다. MUSIQ는 transformer 기반 IQA 모델, CLIP-IQA는
+vision-language alignment 기반, NIQE는 natural scene statistic 기반.
+세 가지가 서로 다른 paradigm이라 보완적입니다. 이 metric들은 generative
+model의 perceptual quality를 underestimate하지 않습니다.
+
+Temporal consistency — tLPIPS 와 tOF. tLPIPS 는 인접 frame 간의 LPIPS
+distance — texture-level flicker를 잘 잡아냅니다. tOF는 optical flow
+의 difference로 motion fidelity를 측정합니다.
+
+이 9 metric을 모두 사용하는 이유는 — generative VSR이 perception-distortion
+trade-off 위에 있어서 단일 metric으로는 공정한 평가가 불가능하기 때문
+입니다."
+
+💡 강조 포인트:
+   • 4 카테고리를 차례로 짚기
+   • "perception-distortion trade-off" 키워드 강조
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 20 — Experiments (3/6) · REDS4 Results + Frequency Average
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 2분 (★★ 핵심 실험 결과)
+🎯 핵심 메시지: REDS4 in-domain에서 압도적 향상 + frequency spectrum
+   분석으로 mechanism 입증
+
+📝 발표 스크립트:
+
+"본 연구의 핵심 정량 결과입니다.
+
+상단 표 — REDS4 in-domain에서 4 모델 비교입니다. BasicVSR++ (non-DM,
+CNN regression) 와 세 diffusion 모델 — StableVSR (직접 baseline),
+DGAF-VSR (가장 강한 DM comparator), 그리고 본 연구 Ours 입니다.
+
+각 metric을 보시면 — 본 연구는 SSIM 한 개를 제외한 8개 metric에서 best
+입니다. PSNR 24.48, LPIPS 0.193, DISTS 0.088, MUSIQ 65.70, CLIP-IQA
+0.386, NIQE 2.77, tLPIPS 15.25, tOF 11.118.
+
+특히 perceptual axis에서 차이가 압도적입니다. LPIPS는 StableVSR 0.309
+대비 0.193 — 37.5% 감소. MUSIQ는 42.79 대비 65.70 — 53.5% 증가.
+
+가장 인상적인 건 temporal consistency 입니다. tLPIPS 41.11 → 15.25 —
+62.9% 감소. 본 연구가 다루려는 핵심 문제 — temporal flickering — 을 가장
+직접적으로 줄였다는 증거입니다.
+
+좌하단 — StableVSR과의 직접 1:1 비교를 정리한 표 입니다. PSNR과 SSIM도
+미세하게 향상되었고, perceptual / temporal metric은 모두 큰 폭으로 개선.
+9 metric 모두에서 향상 — 어떤 trade-off도 없습니다.
+
+우하단 — Frequency Average. 4 REDS4 sequence (000, 011, 015, 020) 각각에서
+radial power spectrum 비율을 GT 대비로 측정했습니다. 가로축이 spatial
+frequency, 세로축이 power 비율. 1.0 이 GT와 일치한다는 뜻입니다.
+
+세 가지 발견 — 첫째, 저주파에서는 모든 방법이 GT와 거의 일치합니다.
+둘째, 중간 주파수에서 BasicVSR++ 와 StableVSR은 약 0.64 까지 떨어지는데
+본 연구 (빨간 선) 는 0.9 이상을 유지합니다. 셋째, 고주파 영역에서 차이가
+가장 큽니다 — 본 연구는 0.69 retention인데 StableVSR은 0.34 — 두 배
+차이입니다.
+
+이 frequency-domain 분석이 본 연구의 핵심 가설을 직접 입증합니다 —
+HIGH band를 decoder로 보내는 BD-SFT 가 정말로 pixel-level loss가 잡지
+못하는 spectral content를 보존하고 있다는 mechanistic evidence 입니다."
+
+💡 강조 포인트:
+   • 표에서 본 연구 행을 손가락으로 짚어가며 metric별 차이 강조
+   • 62.9% tLPIPS 감소 — 핵심 숫자
+   • Frequency spectrum 분석 — "mechanism evidence" 라는 framing
+   • "trade-off 없음" 강조
+
+⚠️  Q&A 대비:
+   Q: "SSIM에서 BasicVSR++ 보다 낮은데 괜찮나요?"
+   A: "BasicVSR++ 는 CNN regression model로 PSNR/SSIM 같은 pixel-level
+       fidelity를 직접 최적화합니다. 본 연구는 perception-distortion
+       trade-off 의 perceptual extreme을 추구하므로 SSIM이 다소 낮은 건
+       자연스러운 결과입니다. 다만 perceptual metric (LPIPS, MUSIQ 등)
+       에서는 큰 폭으로 우수합니다. DM 그룹 내 비교에서는 PSNR/SSIM 모두
+       Ours 가 best 입니다."
+
+   Q: "Frequency analysis는 어떻게 수행했나요?"
+   A: "각 frame의 출력에 2D FFT를 적용하고, frequency space에서 radial
+       (방향 무관) 으로 average해서 1D power spectrum을 얻습니다. GT
+       프레임 spectrum과의 ratio를 plot한 것입니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 21 — Experiments (4/6) · Cross-Dataset (Vid4/UDM10/SPMCS)
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초
+🎯 핵심 메시지: OOD에서 perceptual 우세, distribution shift 솔직히 인정
+
+📝 발표 스크립트:
+
+"OOD 세 dataset 결과입니다.
+
+먼저 Vid4 (SD compressed) — DGAF-VSR이 LPIPS, DISTS, MUSIQ, CLIP-IQA, NIQE
+에서 best 입니다. Ours는 perceptual metric에서 second-best 정도, fidelity
+는 다소 낮습니다.
+
+UDM10 — non-DM BasicVSR++가 PSNR/SSIM/LPIPS/DISTS에서 압도적 best 입니다.
+하지만 NR perceptual — MUSIQ, CLIP-IQA, NIQE — 에서는 Ours가 best.
+다만 tLPIPS 가 14.48 로 다른 DM 모델보다 높습니다.
+
+SPMCS — BasicVSR++가 fidelity와 tLPIPS, tOF best. DM 그룹 내에서는
+DGAF-VSR이 6/9 metric best, Ours가 second입니다.
+
+세 dataset 패턴 — Ours는 OOD에서 NR perceptual은 강하지만, fidelity와
+temporal metric은 distribution shift의 영향을 받습니다.
+
+이 패턴을 솔직하게 해석하면 — 본 연구의 wavelet conditioning이 REDS의
+frequency statistics에 specialize되도록 학습됐기 때문입니다. Vid4 같은
+compressed SD content는 frequency distribution이 다르고, UDM10은
+static short clip이라 motion stochasticity가 frame 간 누적되어 tLPIPS
+가 악화됩니다.
+
+중요한 점 — 본 연구는 mechanism-level contribution 검증을 위해 의도적으로
+REDS-only로 학습했습니다. 모든 main DM baseline (StableVSR, DGAF-VSR)
+도 동일한 REDS-only setup이라, 이 OOD 패턴은 method-specific 한계가
+아니라 specialization-generalization trade-off의 결과입니다."
+
+💡 강조 포인트:
+   • OOD에서 완벽하지 않다는 점을 정직하게 인정
+   • "distribution shift, not overfitting" 메시지
+   • Mechanism-level 검증이 목적임을 다시 강조
+
+⚠️  Q&A 대비:
+   Q: "OOD에서 약한데 overfitting 아닌가요?"
+   A: "(slide 25 backup이 있다면) 별도 슬라이드에서 자세히 다루겠지만 —
+       Overfitting은 같은 distribution의 held-out test set에서 떨어지는
+       현상입니다. REDS4는 학습에 사용되지 않은 held-out이지만 REDS
+       distribution과 동일하고, 거기서 모든 9 metric이 향상됐습니다.
+       Vid4/UDM10/SPMCS의 gap은 distribution shift이고, 모든 DM baseline
+       이 같은 REDS-only setup으로 같은 shift를 겪습니다. 또한 학습 가능
+       파라미터가 6.22M, frozen 472M+55M 인 구조에서 memorization은
+       구조적으로 불가능합니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 22 — Experiments (5/6) · Qualitative Comparison
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분
+🎯 핵심 메시지: 시각적으로도 sharper / cleaner detail
+
+📝 발표 스크립트:
+
+"정성 비교 결과입니다. 네 dataset 각각에서 동일 patch를 6 column으로
+비교합니다 — Bicubic / BasicVSR++ / StableVSR / DGAF-VSR / Ours / GT.
+
+REDS4 첫 행 — 버스의 글자와 백미러 부근의 detail을 보시면, Ours가 가장
+sharp하고 GT와 가까운 글자 가독성을 보여줍니다. StableVSR과 DGAF-VSR
+은 다소 blur가 있고, BasicVSR++ 는 더 smooth합니다.
+
+UDM10 두 번째 행 — 건물 외벽 detail. Ours는 brick texture를 더 사실적
+으로 합성합니다.
+
+SPMCS 세 번째 행 — 곡선 difference 모양 텍스처. 정밀한 곡률과 색감이
+가장 GT에 가깝습니다.
+
+Vid4 네 번째 행 — calendar 글자. 작은 글자가 가장 어려운 케이스인데
+Ours가 가장 잘 복원합니다 — 다만 정확한 stroke 매칭은 perception-
+distortion trade-off로 인해 LPIPS 측면에선 손해가 있을 수 있습니다.
+
+전반적으로 — 정량 결과의 perceptual 우세가 정성 비교에서도 일관되게
+관찰됩니다."
+
+💡 강조 포인트:
+   • 한두 patch를 손가락으로 짚으면서 specific detail 강조
+   • "perception-distortion trade-off" 키워드 재등장
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 23 — Experiments (6/6) · Frequency Conditioning vs Flow Warping
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초 (★ 차별점 입증)
+🎯 핵심 메시지: tOF 분석으로 — Ours가 motion이 강한 영역에서 더 robust
+
+📝 발표 스크립트:
+
+"본 연구의 차별점 — frequency conditioning이 flow warping을 어떻게 보완
+하는지 — 를 정량적으로 입증하는 슬라이드입니다.
+
+위 그래프 — REDS4 전 sequence에서, x축이 GT optical flow magnitude
+(즉 frame 간 motion 강도), y축이 tOF error (낮을수록 좋음) 입니다.
+
+각 점이 하나의 frame pair 입니다. 빨간 점이 StableVSR, 초록 점이 Ours.
+두 모델 모두 motion이 커질수록 tOF error가 커지지만 — 기울기가 다릅니다.
+StableVSR의 fitted line slope는 0.118 — Ours의 0.097보다 22% 가파릅니다.
+
+이 의미는 — StableVSR의 flow-based conditioning은 motion이 강해질수록
+더 빠르게 degrade 합니다. Optical flow estimation 자체가 큰 motion에서
+fragile해지기 때문입니다. 반면 Ours의 frequency conditioning은 motion-
+independent하므로 motion 강도가 커져도 성능 저하가 완만합니다.
+
+좌상단 표 — REDS4 평균 tOF가 StableVSR 1.504 → Ours 1.172, -22.1% 향상.
+Motion-tOF correlation은 0.666 → 0.585 — 즉 Ours는 motion에 대한 의존도가
+낮습니다.
+
+가장 극단적 예시 — sequence 011, frame 16→17 — Ours는 StableVSR 대비
+tOF가 7배 작습니다. 85% 향상.
+
+하단 시각화 — GT frame 17, GT flow magnitude (큰 motion 영역이 노란색),
+그리고 StableVSR과 Ours의 tOF error map 입니다. StableVSR은 motion이
+큰 영역에서 강한 빨간색 (큰 오류), Ours는 동일 영역에서 훨씬 cooler tone.
+오른쪽 Improvement map의 빨간색이 Ours가 우세한 영역 — 거의 전체 frame
+에 분포합니다.
+
+이 분석은 본 연구의 핵심 주장 — frequency-domain conditioning이 motion-
+intensive scenario에서 flow-based conditioning을 architecturally 보완
+한다 — 를 직접 입증합니다."
+
+💡 강조 포인트:
+   • Scatter plot의 두 slope 차이 강조 (0.118 vs 0.097)
+   • 7배 차이 극단 예시 강조
+   • "motion-independent" 키워드
+   • 이게 본 연구의 mechanism이 왜 작동하는지에 대한 "smoking gun" 증거
+
+⚠️  Q&A 대비:
+   Q: "왜 본 연구가 motion에서 더 robust한가요? flow 안 쓰니까 당연한 것?"
+   A: "정확히 그 이유입니다. 본 연구의 frequency conditioning은 현재 프레임
+       내부의 spatial frequency 정보만 사용하므로, frame 간 motion이 커도
+       conditioning signal 자체가 영향받지 않습니다. 반면 flow-based
+       conditioning은 motion 추정 자체가 challenge가 되면 conditioning
+       signal 품질이 떨어집니다. 이게 architectural-level 차별점입니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 24 — Ablation · Frequency-Band Injection
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초 (★ 디자인 정당화)
+🎯 핵심 메시지: HIGH/LOW band 각각의 contribution + super-additive 효과
+
+📝 발표 스크립트:
+
+"마지막 실험은 ablation 입니다. Inference time에 SFT modulation을 선택적으로
+disable 해서 (γ=1, β=0) 각 band의 contribution을 분리 측정했습니다. 같은
+학습 모델을 사용하므로 학습 trajectory 차이로 인한 confound가 없습니다.
+
+표 결과 — 네 variant 비교입니다.
+
+WC-BD-SFT (full) — 모든 metric에서 best 또는 second-best.
+
+w/o HIGH — HIGH band injection 제거. tLPIPS가 15.25 → 22.11 로 45% 악화,
+LPIPS도 0.193 → 0.223 로 15% 악화. Decoder의 HIGH band conditioning이
+inter-frame texture coherence에 결정적임이 확인됩니다.
+
+w/o LOW — LOW band injection 제거. PSNR과 SSIM은 미세하게 향상되지만,
+NR perceptual — MUSIQ 65.70 → 63.39, CLIP-IQA 0.386 → 0.335 — 가 모두
+악화. 이건 perception-distortion trade-off 의 미니어처입니다. Encoder의
+LOW band guidance가 perceptual naturalness에 기여합니다.
+
+가장 중요한 발견 — w/o both. 둘 다 제거하면 LPIPS가 0.247로 단일 disable
+의 worst case (0.223) 보다 더 악화됩니다. MUSIQ도 59.35로 폭락.
+
+이건 super-additive degradation — 즉 두 band가 단순 additive가 아니라
+U-Net 내부에서 비선형적으로 interaction한다는 의미입니다. 두 band가
+synergistic하게 jointly necessary 합니다.
+
+종합적으로 — asymmetric injection 디자인이 단순 additive 개선이 아닌
+mechanistic synergy 라는 강한 증거입니다."
+
+💡 강조 포인트:
+   • 표의 네 row를 차례로 짚으며 each 결과 강조
+   • "super-additive" 라는 용어 — 굳이 어렵지 않게 풀어서 설명
+   • Ablation이 디자인의 each 부분을 정당화
+
+⚠️  Q&A 대비:
+   Q: "HIGH band를 encoder에, LOW band를 decoder에 넣은 ablation은?"
+   A: "Cross-injection ablation은 본 thesis에서 직접 수행하지 않았습니다.
+       다만 functional alignment 근거 — FreeU의 encoder HF suppression,
+       decoder HF reintroduction — 에서 alignment를 깨면 mechanism 자체가
+       의미를 잃습니다. 이건 future work으로 확인 예정입니다."
+
+   Q: "Identity initialization은 어떻게 검증했나요?"
+   A: "Step 0 에서 wrapped U-Net의 output이 baseline U-Net과 동일한지
+       sanity check를 수행했습니다. γ ≡ 1, β ≡ 0 일 때 SFT 연산이 identity
+       이므로 학습 시작 시점에 baseline 동작이 완전히 보존됩니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 25 — Conclusion + Limitations & Future Work
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 1분 30초
+🎯 핵심 메시지: 본 연구의 기여 요약 + 한계 정직히 인정
+
+📝 발표 스크립트:
+
+"이제 결론입니다.
+
+본 연구의 contribution 세 가지를 다시 강조합니다.
+
+첫째 — WC-BD-SFT framework. Diffusion-based VSR을 위한 frequency-domain
+adaptation framework로, DT-CWT 기반 conditioning을 frozen pre-trained
+U-Net에 asymmetric하게 주입합니다. Motion-independent signal로
+optical-flow conditioning을 complementary하게 보완합니다.
+
+둘째 — Parameter-efficient with no prior damage. Frequency Encoder가
+6.22M 파라미터 — ControlNet의 약 3% 입니다. Identity-preserving
+initialization으로 사전학습된 generative prior를 fully preserve합니다.
+
+셋째 — Strong empirical gains. REDS4 in-domain에서 tLPIPS 41.11 → 15.25,
+62.9% 감소로 substantial한 temporal consistency 개선. LPIPS는 37.5%,
+DISTS는 46.3%, MUSIQ는 53.5% 향상 — 9 metric 모두에서 개선. High-
+frequency spectral power retention은 0.341 → 0.693 — 약 2배 회복.
+
+하지만 한계도 명확히 인정합니다.
+
+Limitation 1 — Wavelet conditioning이 training distribution의 frequency
+statistics에 specialize됩니다. OOD에서 gain이 감소하는 건 architectural
+specialization의 자연스러운 결과입니다. 모든 DM baseline이 같은 REDS-only
+setup이라 distribution shift이지 overfitting은 아닙니다.
+
+Limitation 2 — Bicubic degradation 만 다루었습니다. Real-world degradation
+은 별도 axis이고, 본 연구의 mechanism이 그 axis와 orthogonal하므로
+real-world 확장이 자연스러운 future work입니다.
+
+Future work — frequency conditioning을 OGWM 같은 architectural module과
+fusion, real-world degradation 학습, 그리고 DT-CWT 외의 더 다양한
+frequency representation 탐구가 다음 단계입니다."
+
+💡 강조 포인트:
+   • 세 가지 contribution을 다시 한번
+   • Limitation을 솔직하게 — defense quality 높임
+   • Future work를 자연스러운 다음 단계로 framing
+
+⚠️  Q&A 대비:
+   (이 슬라이드 후 본격적인 Q&A — 미리 답변 준비 필요한 질문들)
+
+   Q: "본 연구의 가장 큰 novelty 한 마디로 요약하면?"
+   A: "Frozen pre-trained image diffusion model에 frequency-domain conditioning을
+       motion-independent하게 주입해서 temporal consistency를 architecturally
+       달성한 — 첫 번째 framework입니다."
+
+   Q: "Industry impact 는?"
+   A: "본 연구의 mechanism은 industry deployment를 위한 real-world VSR
+       확장의 토대가 됩니다. 특히 motion-independent conditioning은
+       autonomous driving, surveillance 같은 motion-intensive 응용에서
+       value가 있습니다."
+
+   Q: "다음 연구 계획은?"
+   A: "박사과정에서 — 첫째, OGWM 같은 motion-aware module과 frequency
+       conditioning의 architectural fusion. 둘째, real-world degradation
+       training. 셋째, DT-CWT 외의 다양한 frequency representation —
+       Wavelet Packet, Curvelet 등 — 의 비교 연구를 계획하고 있습니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 26 — References
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 5초 (skip)
+
+📝 발표 스크립트:
+
+"References는 발표 중에는 skip하고, 필요시 Q&A에서 참고하겠습니다."
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+SLIDE 27 — Thank you / QnA
+════════════════════════════════════════════════════════════════════════════════
+
+⏱  목표 시간: 10초
+🎯 핵심 메시지: 정중한 마무리
+
+📝 발표 스크립트:
+
+"이상으로 발표를 마치겠습니다. 들어주셔서 감사합니다.
+
+질문 부탁드립니다."
+
+💡 강조 포인트:
+   • 미소를 띠고 정중하게
+   • Q&A 시간 — 자신감 있게 답변
+   • 모르는 질문이 나오면 "좋은 지적입니다. future work으로 검토하겠습니다"
+     같은 답변 가능
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          📋 발표 전 체크리스트
+════════════════════════════════════════════════════════════════════════════════
+
+□ 발표 환경 점검
+   • 노트북 / 빔프로젝터 / HDMI 연결 확인
+   • PowerPoint Presenter View로 노트 보면서 발표 가능한지 확인
+   • 슬라이드 자동 전환 OFF, 수동 페이지 넘김
+   • 마우스 / 클리커 준비
+
+□ 슬라이드 점검
+   • 모든 그림 / 표가 화면에서 잘 보이는지
+   • 수식 깨짐 없는지
+   • 페이지 번호 정확한지
+
+□ 발표 리허설 (3회 이상 권장)
+   • 시간 측정 — 25분 안에 들어가는지
+   • 발음 어려운 단어 (Wavelet-Conditioned, Dual-Tree Complex Wavelet) 연습
+   • Method 슬라이드 (13-17) 만 따로 한 번 더 연습
+
+□ Q&A 사전 준비
+   • Overfitting 질문 (slide 21 backup script)
+   • Real-world 질문 (slide 3 backup script)
+   • SSIM 질문 (slide 20 backup script)
+   • Cross-injection ablation 질문 (slide 24 backup script)
+   • FCVSR 차이 질문 (slide 8 backup script)
+   • 다음 연구 계획 질문 (slide 25 backup script)
+
+□ 멘탈 준비
+   • 모르는 질문 → "좋은 지적입니다. 검토하겠습니다" 으로 침착히
+   • 비판적 질문 → "맞습니다. 다만 본 연구는 [...]" 으로 인정 + 보완
+   • 시간 부족 시 — Experiments (3-6 슬라이드) 에서 압축, Method는 그대로
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          🔑 핵심 메시지 요약 (반복 강조용)
+════════════════════════════════════════════════════════════════════════════════
+
+발표 전체에 걸쳐 4~5번 반복할 핵심 키워드들:
+
+1. "Frozen pre-trained diffusion + frequency conditioning"
+   → 본 연구의 unique selling point
+
+2. "Motion-independent" / "Optical-flow-independent"
+   → DGAF-VSR, StableVSR 과의 차별점
+
+3. "Shift-stable conditioning (near shift-invariance)"
+   → DWT 기반 다른 frequency 방법과의 차별점
+
+4. "Asymmetric encoder-decoder injection (BD-SFT)"
+   → 본 연구만의 architectural novelty
+
+5. "−62.9% tLPIPS, −37.5% LPIPS on REDS4"
+   → headline empirical number
+
+6. "Mechanism-level contribution, not deployment-ready"
+   → limitation 정직히 인정하는 framing
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          끝 — 모든 슬라이드 스크립트 작성 완료
+                          행운을 빕니다. 발표 잘 하세요. 🍀
+════════════════════════════════════════════════════════════════════════════════
