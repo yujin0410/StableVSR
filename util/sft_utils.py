@@ -164,7 +164,22 @@ class FrequencyConditioningEncoder(nn.Module):
             return t
         return F.interpolate(t, size=target_hw, mode='bilinear', align_corners=False)
 
-    def forward(self, yh, yl=None):
+    def forward(self, yh=None, yl=None, lr=None):
+        # When a PixelPyramidConditioner has been attached (cond_mode=pixel),
+        # callers may pass `lr=` instead of (yh, yl); we run the conditioner
+        # here so the gradient path stays inside the (possibly DDP-wrapped)
+        # encoder's forward, which is required for multi-GPU grad sync.
+        if lr is not None:
+            pix = getattr(self, "pixel_cond_model", None)
+            if pix is None:
+                raise ValueError(
+                    "FrequencyConditioningEncoder.forward(lr=...) requires "
+                    "a PixelPyramidConditioner attached as 'pixel_cond_model'."
+                )
+            yl, yh = pix(lr)
+        if yh is None:
+            raise ValueError("Pass either (yh, yl) or lr to the encoder.")
+
         gamma_j1, beta_j1 = self.proc_j1(yh[0])
         gamma_j2, beta_j2 = self.proc_j2(yh[1])
         gamma_j3, beta_j3 = self.proc_j3(yh[2])
@@ -192,6 +207,60 @@ class FrequencyConditioningEncoder(nn.Module):
             'low_gamma': low_gamma,
             'low_beta': low_beta,
         }
+
+
+class PixelPyramidConditioner(nn.Module):
+    """Pixel-domain conditioning that mirrors the DT-CWT output shape.
+
+    Used as a drop-in replacement for ``DTCWTForward`` in the conditioning
+    path (loss path keeps DT-CWT) to ablate the contribution of frequency
+    decomposition while holding the encoder, injection points, and
+    parameter budget fixed.
+
+    Builds a 4-level pixel pyramid of the LR input by repeated 2x average
+    pooling (matching DT-CWT spatial sizes H/2, H/4, H/8, H/16 for H=64).
+    At each level, a learnable 6-direction 3x3 convolution expands 3 RGB
+    channels to 18 (3 RGB x 6 fake subbands), so per-level capacity
+    matches DT-CWT exactly. The result is reshaped to
+    ``[B, 3, 6, H_j, W_j]`` and zero-padded along an "imag" axis to
+    return ``[B, 3, 6, H_j, W_j, 2]``, matching the DT-CWT highpass
+    tensor shape consumed by ``PerLevelProcessor``.
+
+    The lowpass output is the LR pyramid at the coarsest level
+    (``[B, 3, H/16, W/16]``); ``FrequencyConditioningEncoder`` does not
+    read it, but the tuple is returned for API symmetry with
+    ``DTCWTForward``.
+    """
+
+    def __init__(self, in_channels=3, num_subbands=6, num_levels=4):
+        super().__init__()
+        self.num_levels = num_levels
+        self.num_subbands = num_subbands
+        self.dir_convs = nn.ModuleList([
+            nn.Conv2d(in_channels, in_channels * num_subbands, 3, padding=1)
+            for _ in range(num_levels)
+        ])
+
+    def forward(self, lr):
+        B, C, _, _ = lr.shape
+        D = self.num_subbands
+
+        pyramid = []
+        cur = lr
+        for _ in range(self.num_levels):
+            cur = F.avg_pool2d(cur, kernel_size=2, stride=2)
+            pyramid.append(cur)
+
+        yh = []
+        for j, feat in enumerate(pyramid):
+            real = self.dir_convs[j](feat)
+            Hj, Wj = real.shape[-2:]
+            real = real.view(B, C, D, Hj, Wj)
+            imag = torch.zeros_like(real)
+            yh.append(torch.stack([real, imag], dim=-1))
+
+        yl = pyramid[-1]
+        return yl, yh
 
 
 class UNetWithDualSFT(nn.Module):

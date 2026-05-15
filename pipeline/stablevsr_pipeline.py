@@ -738,17 +738,21 @@ class StableVSRPipeline(
     def compute_dual_freq_conds(self, dtcwt_model, cond_encoder, image_list, target_dtype):
         """Pre-compute per-frame conditioning for the dual-SFT design.
 
-        Runs DT-CWT on each LR frame and feeds (yh, yl) into the trainable
-        ``FrequencyConditioningEncoder`` to produce per-frame
-        low_gamma/beta and high_gamma/beta tensors.
+        If ``cond_encoder`` exposes a ``pixel_cond_model`` attribute (the
+        --cond_mode pixel ablation), use it to build the (yh, yl) tuple
+        from the LR frame directly; otherwise run DT-CWT.
 
         Returns a list (len == len(image_list)) of dicts, one per frame.
         """
+        pixel_cond = getattr(cond_encoder, "pixel_cond_model", None)
         conds = []
         for img in image_list:
             cur_lr = img.to(dtype=torch.float32)
-            yl, yh = dtcwt_model(cur_lr)
-            out = cond_encoder(yh, yl)
+            if pixel_cond is not None:
+                out = cond_encoder(lr=cur_lr)
+            else:
+                yl, yh = dtcwt_model(cur_lr)
+                out = cond_encoder(yh, yl)
             conds.append({k: v.to(dtype=target_dtype) for k, v in out.items()})
         return conds
         

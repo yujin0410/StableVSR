@@ -644,6 +644,20 @@ def parse_args(input_args=None):
         help="Weight for the low-frequency (mag+phase) component within freq loss.",
     )
     parser.add_argument(
+        "--cond_mode",
+        type=str,
+        default="dtcwt",
+        choices=["dtcwt", "pixel"],
+        help=(
+            "Conditioning input mode. 'dtcwt' (default) feeds the DT-CWT "
+            "decomposition of the LR frame into the encoder. 'pixel' feeds a "
+            "4-level avg-pool pyramid of the LR frame projected to 18 channels "
+            "by a learnable 6-direction 3x3 conv per level (shape-matched to "
+            "DT-CWT). The frequency-separated loss continues to use DT-CWT in "
+            "both modes; only the conditioning path changes."
+        ),
+    )
+    parser.add_argument(
         "--debug_dual_sft",
         type=int,
         default=0,
@@ -1077,6 +1091,21 @@ def main(args):
         )
         unet_with_sft = UNetWithDualSFT(unet)
         unet_with_sft.cond_encoder = sft_adapter
+
+        # Optional: replace the conditioning input from DT-CWT to a learnable
+        # pixel pyramid. Attached as a child module of sft_adapter so the
+        # optimizer, DDP wrapping, and save/load checkpoints automatically
+        # cover it without further plumbing.
+        if args.cond_mode == "pixel":
+            from util.sft_utils import PixelPyramidConditioner
+            sft_adapter.pixel_cond_model = PixelPyramidConditioner(
+                in_channels=3, num_subbands=6, num_levels=4,
+            )
+            n_pix = sum(p.numel() for p in sft_adapter.pixel_cond_model.parameters())
+            logger.info(
+                f"--cond_mode pixel: PixelPyramidConditioner attached "
+                f"(trainable params = {n_pix}). DT-CWT loss path remains active."
+            )
     else:
         logger.info(
             f"Legacy SFTAdapter feature_channels = {sft_feature_channels}"
@@ -1466,11 +1495,18 @@ def main(args):
 
                 # Step 3: frequency conditioning (DTCWT runs in fp32 for stability)
                 if args.dual_sft:
-                    # New design: encoder consumes (yh, yl) of CURRENT LR only
-                    with torch.no_grad():
-                        Yl_cur, Yh_cur = dtcwt_model(lq.float())
-                    # Encoder forward (gradients flow via this path)
-                    cond_dict = sft_adapter(Yh_cur, Yl_cur)
+                    # New design: encoder consumes (yh, yl) of CURRENT LR only.
+                    # In --cond_mode pixel, push the LR straight into the
+                    # encoder; PixelPyramidConditioner inside the (DDP-
+                    # wrapped) encoder builds the (yh, yl) tuple. The loss
+                    # path below still uses DT-CWT, isolating the
+                    # conditioning effect of frequency decomposition.
+                    if args.cond_mode == "pixel":
+                        cond_dict = sft_adapter(lr=lq.float())
+                    else:
+                        with torch.no_grad():
+                            Yl_cur, Yh_cur = dtcwt_model(lq.float())
+                        cond_dict = sft_adapter(Yh_cur, Yl_cur)
                     _check_finite("dual_sft.low_gamma", cond_dict['low_gamma'])
                     _check_finite("dual_sft.high_gamma", cond_dict['high_gamma'])
                 else:

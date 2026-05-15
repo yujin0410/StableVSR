@@ -67,6 +67,15 @@ parser.add_argument(
          "seqs[shard_id::num_shards].",
 )
 parser.add_argument(
+    "--cond_mode",
+    type=str,
+    default="dtcwt",
+    choices=["dtcwt", "pixel"],
+    help="Conditioning input mode (must match training). 'pixel' attaches a "
+         "PixelPyramidConditioner as child of the encoder so the saved "
+         "sft_adapter.bin checkpoint loads cleanly.",
+)
+parser.add_argument(
     "--no_high_sft",
     action="store_true",
     help="Ablation: replace high_gamma with ones and high_beta with zeros "
@@ -121,6 +130,13 @@ if args.sft_ckpt is not None:
             sft_out_channels_low=per_level,
             high_target=None, low_target=None,
         )
+        if args.cond_mode == "pixel":
+            from util.sft_utils import PixelPyramidConditioner
+            sft_adapter.pixel_cond_model = PixelPyramidConditioner(
+                in_channels=3, num_subbands=6, num_levels=4,
+            )
+            print("  --cond_mode pixel: PixelPyramidConditioner attached "
+                  "(DT-CWT bypassed in conditioning path).")
         sft_adapter.load_state_dict(torch.load(args.sft_ckpt, map_location='cpu'))
         sft_adapter = sft_adapter.to(device)
         sft_adapter.eval()
