@@ -647,14 +647,15 @@ def parse_args(input_args=None):
         "--cond_mode",
         type=str,
         default="dtcwt",
-        choices=["dtcwt", "pixel"],
+        choices=["dtcwt", "pixel", "fft"],
         help=(
-            "Conditioning input mode. 'dtcwt' (default) feeds the DT-CWT "
-            "decomposition of the LR frame into the encoder. 'pixel' feeds a "
-            "4-level avg-pool pyramid of the LR frame projected to 18 channels "
-            "by a learnable 6-direction 3x3 conv per level (shape-matched to "
-            "DT-CWT). The frequency-separated loss continues to use DT-CWT in "
-            "both modes; only the conditioning path changes."
+            "Conditioning input mode (Q2 transform-swap ablation). "
+            "'dtcwt' (default) feeds the DT-CWT decomposition of the LR. "
+            "'pixel' feeds a 4-level avg-pool pyramid + learnable 6-dir conv. "
+            "'fft' feeds a 4-level pyramid + 6-wedge directional FFT "
+            "(fixed transform, no learnable params, parity with DT-CWT). "
+            "The frequency-separated loss path continues to use DT-CWT in "
+            "all modes; only the conditioning input changes."
         ),
     )
     parser.add_argument(
@@ -691,11 +692,11 @@ def parse_args(input_args=None):
     if args.proportion_empty_prompts < 0 or args.proportion_empty_prompts > 1:
         raise ValueError("`--proportion_empty_prompts` must be in the range [0, 1].")
 
-    if args.cond_mode == "pixel" and not args.dual_sft:
+    if args.cond_mode in ("pixel", "fft") and not args.dual_sft:
         raise ValueError(
-            "--cond_mode pixel requires --dual_sft. The pixel conditioner is "
-            "attached to FrequencyConditioningEncoder, which is only built "
-            "under the dual-SFT design."
+            f"--cond_mode {args.cond_mode} requires --dual_sft. The "
+            "conditioner is attached to FrequencyConditioningEncoder, "
+            "which is only built under the dual-SFT design."
         )
 
     if args.validation_prompt is not None and args.validation_image is None:
@@ -1099,10 +1100,12 @@ def main(args):
         unet_with_sft = UNetWithDualSFT(unet)
         unet_with_sft.cond_encoder = sft_adapter
 
-        # Optional: replace the conditioning input from DT-CWT to a learnable
-        # pixel pyramid. Attached as a child module of sft_adapter so the
+        # Optional: replace the conditioning input from DT-CWT to either a
+        # learnable pixel pyramid (Q1) or a fixed multi-level directional
+        # FFT (Q2). Attached as a child module of sft_adapter so the
         # optimizer, DDP wrapping, and save/load checkpoints automatically
-        # cover it without further plumbing.
+        # cover it without further plumbing. Both expose .pixel_cond_model
+        # so the pipeline's auto-routing logic works for either variant.
         if args.cond_mode == "pixel":
             from util.sft_utils import PixelPyramidConditioner
             sft_adapter.pixel_cond_model = PixelPyramidConditioner(
@@ -1112,6 +1115,16 @@ def main(args):
             logger.info(
                 f"--cond_mode pixel: PixelPyramidConditioner attached "
                 f"(trainable params = {n_pix}). DT-CWT loss path remains active."
+            )
+        elif args.cond_mode == "fft":
+            from util.sft_utils import FFTPyramidConditioner
+            sft_adapter.pixel_cond_model = FFTPyramidConditioner(
+                num_subbands=6, num_levels=4,
+            )
+            logger.info(
+                "--cond_mode fft: FFTPyramidConditioner attached "
+                "(fixed transform, 0 learnable params). "
+                "DT-CWT loss path remains active."
             )
     else:
         logger.info(
@@ -1508,7 +1521,7 @@ def main(args):
                     # wrapped) encoder builds the (yh, yl) tuple. The loss
                     # path below still uses DT-CWT, isolating the
                     # conditioning effect of frequency decomposition.
-                    if args.cond_mode == "pixel":
+                    if args.cond_mode in ("pixel", "fft"):
                         cond_dict = sft_adapter(lr=lq.float())
                         # debug_dual_sft_step still reports DT-CWT subband
                         # stats for parity with the dtcwt run. Compute them

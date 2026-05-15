@@ -263,6 +263,75 @@ class PixelPyramidConditioner(nn.Module):
         return yl, yh
 
 
+class FFTPyramidConditioner(nn.Module):
+    """FFT-based directional conditioning matching DT-CWT output shape.
+
+    Q2 ablation: replaces DT-CWT in the conditioning path with a multi-
+    level directional FFT decomposition. Builds a 4-level avg-pool pixel
+    pyramid (same as PixelPyramidConditioner), then at each level
+    computes a 2D FFT and partitions the frequency plane into
+    ``num_subbands`` angular wedges in ``[0, pi)``. Each wedge is masked
+    and inverse-FFT'd to produce a complex spatial subband. Stacked,
+    these give the DT-CWT-compatible shape
+    ``[B, 3, num_subbands, H_j, W_j, 2]`` where the last dim holds the
+    real/imag components.
+
+    No learnable parameters (parity with DT-CWT, which is also a fixed
+    transform). The downstream PerLevelProcessor x4 encoder is unchanged.
+
+    Tests that "frequency-domain conditioning works" vs "DT-CWT in
+    particular works" -- both are frequency, but DT-CWT additionally
+    provides shift-invariance and directional selectivity that band-
+    masked FFT does not.
+    """
+
+    def __init__(self, num_subbands=6, num_levels=4):
+        super().__init__()
+        self.num_subbands = num_subbands
+        self.num_levels = num_levels
+
+    @staticmethod
+    def _build_wedge_masks(H, W, num_dirs, device):
+        # angular wedges in [0, pi); single-sided (mask is NOT conjugate-
+        # symmetric) so the inverse FFT yields a complex (analytic-like)
+        # signal with non-trivial imag, mirroring DT-CWT's complex output.
+        fy = torch.fft.fftfreq(H, device=device).view(H, 1).expand(H, W)
+        fx = torch.fft.fftfreq(W, device=device).view(1, W).expand(H, W)
+        angle = torch.atan2(fy, fx)  # [-pi, pi]
+        folded = torch.where(angle < 0, angle + torch.pi, angle)  # [0, pi)
+        # bin index, clamped (handle the exact-pi boundary defensively)
+        bins = (folded / torch.pi * num_dirs).long().clamp(0, num_dirs - 1)
+        # one-hot per bin -> [num_dirs, H, W]
+        masks = torch.zeros(num_dirs, H, W, device=device, dtype=torch.float32)
+        for k in range(num_dirs):
+            masks[k] = (bins == k).float()
+        return masks
+
+    def forward(self, lr):
+        B, C, _, _ = lr.shape
+        D = self.num_subbands
+
+        pyramid = []
+        cur = lr
+        for _ in range(self.num_levels):
+            cur = F.avg_pool2d(cur, kernel_size=2, stride=2)
+            pyramid.append(cur)
+
+        yh = []
+        for feat in pyramid:
+            Hj, Wj = feat.shape[-2:]
+            X = torch.fft.fft2(feat, norm='ortho')  # [B, C, H, W] complex
+            masks = self._build_wedge_masks(Hj, Wj, D, feat.device)  # [D, H, W]
+            # broadcast masks against X: [1, 1, D, H, W] * [B, C, 1, H, W]
+            X_dir = X.unsqueeze(2) * masks.view(1, 1, D, Hj, Wj)
+            x_dir = torch.fft.ifft2(X_dir, norm='ortho')  # [B, C, D, H, W] complex
+            yh_j = torch.stack([x_dir.real, x_dir.imag], dim=-1)
+            yh.append(yh_j.to(feat.dtype))
+
+        yl = pyramid[-1]
+        return yl, yh
+
+
 class UNetWithDualSFT(nn.Module):
     """Wrap a U-Net with dual SFT injection.
 
