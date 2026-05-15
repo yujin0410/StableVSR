@@ -1510,6 +1510,14 @@ def main(args):
                     # conditioning effect of frequency decomposition.
                     if args.cond_mode == "pixel":
                         cond_dict = sft_adapter(lr=lq.float())
+                        # debug_dual_sft_step still reports DT-CWT subband
+                        # stats for parity with the dtcwt run. Compute them
+                        # only when debug is enabled (no grad, side path).
+                        if args.debug_dual_sft > 0:
+                            with torch.no_grad():
+                                Yl_cur, Yh_cur = dtcwt_model(lq.float())
+                        else:
+                            Yh_cur, Yl_cur = None, None
                     else:
                         with torch.no_grad():
                             Yl_cur, Yh_cur = dtcwt_model(lq.float())
