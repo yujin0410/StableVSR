@@ -691,6 +691,13 @@ def parse_args(input_args=None):
     if args.proportion_empty_prompts < 0 or args.proportion_empty_prompts > 1:
         raise ValueError("`--proportion_empty_prompts` must be in the range [0, 1].")
 
+    if args.cond_mode == "pixel" and not args.dual_sft:
+        raise ValueError(
+            "--cond_mode pixel requires --dual_sft. The pixel conditioner is "
+            "attached to FrequencyConditioningEncoder, which is only built "
+            "under the dual-SFT design."
+        )
+
     if args.validation_prompt is not None and args.validation_image is None:
         raise ValueError("`--validation_image` must be set if `--validation_prompt` is set")
 
