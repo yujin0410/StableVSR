@@ -744,7 +744,11 @@ class StableVSRPipeline(
 
         Returns a list (len == len(image_list)) of dicts, one per frame.
         """
-        pixel_cond = getattr(cond_encoder, "pixel_cond_model", None)
+        # cond_encoder may be a DDP/DataParallel wrapper (during training-time
+        # validation); attribute access is not delegated to the wrapped
+        # module, so unwrap once to look up pixel_cond_model.
+        inner_enc = cond_encoder.module if hasattr(cond_encoder, "module") else cond_encoder
+        pixel_cond = getattr(inner_enc, "pixel_cond_model", None)
         conds = []
         for img in image_list:
             cur_lr = img.to(dtype=torch.float32)
