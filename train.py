@@ -647,7 +647,7 @@ def parse_args(input_args=None):
         "--cond_mode",
         type=str,
         default="dtcwt",
-        choices=["dtcwt", "pixel", "fft", "dwt"],
+        choices=["dtcwt", "pixel", "fft", "dwt", "dct"],
         help=(
             "Conditioning input mode (Q2 transform-swap ablation). "
             "'dtcwt' (default) feeds the DT-CWT decomposition of the LR. "
@@ -693,7 +693,7 @@ def parse_args(input_args=None):
     if args.proportion_empty_prompts < 0 or args.proportion_empty_prompts > 1:
         raise ValueError("`--proportion_empty_prompts` must be in the range [0, 1].")
 
-    if args.cond_mode in ("pixel", "fft", "dwt") and not args.dual_sft:
+    if args.cond_mode in ("pixel", "fft", "dwt", "dct") and not args.dual_sft:
         raise ValueError(
             f"--cond_mode {args.cond_mode} requires --dual_sft. The "
             "conditioner is attached to FrequencyConditioningEncoder, "
@@ -1137,6 +1137,16 @@ def main(args):
                 "(real DWT, 3 subbands zero-padded to 6, imag=0, "
                 "0 learnable params). DT-CWT loss path remains active."
             )
+        elif args.cond_mode == "dct":
+            from util.sft_utils import DCTPyramidConditioner
+            sft_adapter.pixel_cond_model = DCTPyramidConditioner(
+                num_subbands=6, num_levels=4,
+            )
+            logger.info(
+                "--cond_mode dct: DCTPyramidConditioner attached "
+                "(orthonormal 2D DCT-II, 6 angular wedges in [0,pi/2], "
+                "imag=0, 0 learnable params). DT-CWT loss path remains active."
+            )
     else:
         logger.info(
             f"Legacy SFTAdapter feature_channels = {sft_feature_channels}"
@@ -1532,7 +1542,7 @@ def main(args):
                     # wrapped) encoder builds the (yh, yl) tuple. The loss
                     # path below still uses DT-CWT, isolating the
                     # conditioning effect of frequency decomposition.
-                    if args.cond_mode in ("pixel", "fft", "dwt"):
+                    if args.cond_mode in ("pixel", "fft", "dwt", "dct"):
                         cond_dict = sft_adapter(lr=lq.float())
                         # debug_dual_sft_step still reports DT-CWT subband
                         # stats for parity with the dtcwt run. Compute them

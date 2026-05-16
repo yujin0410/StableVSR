@@ -70,7 +70,7 @@ parser.add_argument(
     "--cond_mode",
     type=str,
     default="dtcwt",
-    choices=["dtcwt", "pixel", "fft", "dwt"],
+    choices=["dtcwt", "pixel", "fft", "dwt", "dct"],
     help="Conditioning input mode (must match training). 'pixel' / 'fft' / "
          "'dwt' attach the corresponding conditioner as child of the encoder "
          "so the saved sft_adapter.bin checkpoint loads cleanly.",
@@ -151,6 +151,13 @@ if args.sft_ckpt is not None:
             )
             print("  --cond_mode dwt: DWTPyramidConditioner attached "
                   "(DT-CWT bypassed; real DWT db4, 3 subbands -> 6 zero-pad).")
+        elif args.cond_mode == "dct":
+            from util.sft_utils import DCTPyramidConditioner
+            sft_adapter.pixel_cond_model = DCTPyramidConditioner(
+                num_subbands=6, num_levels=4,
+            )
+            print("  --cond_mode dct: DCTPyramidConditioner attached "
+                  "(DT-CWT bypassed; orthonormal 2D DCT-II, 6 angular wedges).")
         sft_adapter.load_state_dict(torch.load(args.sft_ckpt, map_location='cpu'))
         sft_adapter = sft_adapter.to(device)
         sft_adapter.eval()

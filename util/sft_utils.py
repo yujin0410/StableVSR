@@ -373,6 +373,84 @@ class DWTPyramidConditioner(nn.Module):
         return yl, out
 
 
+class DCTPyramidConditioner(nn.Module):
+    """DCT-based directional conditioning matching DT-CWT output shape.
+
+    Q2 ablation: replaces DT-CWT with the 2D Discrete Cosine Transform
+    (DCT-II, orthonormal). Builds a 4-level avg-pool pyramid, applies a
+    full 2D DCT at each level, partitions the (all-positive) frequency
+    quadrant into ``num_subbands`` angular wedges in ``[0, pi/2]``, then
+    inverse-DCTs each masked block back to spatial. The result is
+    stacked with an all-zero imag axis to match DT-CWT's
+    ``[B, 3, num_subbands, H_j, W_j, 2]`` shape.
+
+    Trade-offs vs DT-CWT:
+      - Real-valued -> no phase / imag is 0.
+      - Frequency plane lives only in [0, pi/2] (mirror-extended) -> half
+        the angular resolution of complex transforms.
+      - Not shift-invariant.
+
+    Fixed transform; no learnable parameters.
+    """
+
+    def __init__(self, num_subbands=6, num_levels=4):
+        super().__init__()
+        self.num_subbands = num_subbands
+        self.num_levels = num_levels
+
+    @staticmethod
+    def _dct_matrix(N, device, dtype):
+        n = torch.arange(N, device=device, dtype=dtype).view(1, N)
+        k = torch.arange(N, device=device, dtype=dtype).view(N, 1)
+        M = torch.cos(torch.pi * (2 * n + 1) * k / (2 * N))
+        M = M * (2.0 / N) ** 0.5
+        M[0, :] = M[0, :] / (2 ** 0.5)
+        return M  # [k, n], orthonormal: M @ M.T = I
+
+    @staticmethod
+    def _build_wedge_masks(H, W, num_dirs, device, dtype):
+        # DCT-II frequency plane: nonnegative kx, ky.
+        ky = torch.arange(H, device=device, dtype=dtype).view(H, 1).expand(H, W)
+        kx = torch.arange(W, device=device, dtype=dtype).view(1, W).expand(H, W)
+        # angle in [0, pi/2]; DC (0,0) defaults to 0 -> bin 0
+        angle = torch.atan2(ky, kx)
+        bins = (angle / (torch.pi / 2 + 1e-8) * num_dirs).long().clamp(0, num_dirs - 1)
+        masks = torch.zeros(num_dirs, H, W, device=device, dtype=dtype)
+        for k in range(num_dirs):
+            masks[k] = (bins == k).to(dtype)
+        return masks
+
+    def forward(self, lr):
+        lr = lr.float()
+        B, C, _, _ = lr.shape
+        D = self.num_subbands
+
+        pyramid = []
+        cur = lr
+        for _ in range(self.num_levels):
+            cur = F.avg_pool2d(cur, kernel_size=2, stride=2)
+            pyramid.append(cur)
+
+        yh = []
+        for feat in pyramid:
+            Hj, Wj = feat.shape[-2:]
+            Mh = self._dct_matrix(Hj, feat.device, feat.dtype)
+            Mw = self._dct_matrix(Wj, feat.device, feat.dtype)
+            # 2D forward DCT: X = Mh @ feat @ Mw.T (per B,C)
+            X = torch.einsum("kh,bchw->bckw", Mh, feat)
+            X = torch.einsum("lw,bckw->bckl", Mw, X)  # [B, C, H, W] in DCT space
+            # mask 6 angular wedges
+            masks = self._build_wedge_masks(Hj, Wj, D, feat.device, feat.dtype)
+            X_dir = X.unsqueeze(2) * masks.view(1, 1, D, Hj, Wj)  # [B, C, D, H, W]
+            # 2D inverse DCT: use M.T (orthonormal)
+            y = torch.einsum("hk,bcdkw->bcdhw", Mh.t(), X_dir)
+            y = torch.einsum("wl,bcdhl->bcdhw", Mw.t(), y)
+            yh.append(torch.stack([y, torch.zeros_like(y)], dim=-1))
+
+        yl = pyramid[-1]
+        return yl, yh
+
+
 class UNetWithDualSFT(nn.Module):
     """Wrap a U-Net with dual SFT injection.
 
