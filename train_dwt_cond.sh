@@ -12,7 +12,7 @@
 
 MODEL_ID='claudiom4sir/StableVSR'
 OUTPUT_DIR='experiments/20260516_dwtcond'
-GPUS="3"
+GPUS="1 3"
 
 GPUS_STR=$(echo $GPUS | tr ' ' ',')
 
@@ -37,6 +37,7 @@ accelerate launch --num_processes $NUM_PROCESSES --main_process_port 29504 train
  --enable_xformers_memory_efficient_attention \
  --dual_sft \
  --cond_mode=dwt \
+ --resume_from_checkpoint=latest \
  --debug_dual_sft=100 \
  --freq_loss_interval=4 \
  --lambda_freq=1.0 \
