@@ -647,13 +647,14 @@ def parse_args(input_args=None):
         "--cond_mode",
         type=str,
         default="dtcwt",
-        choices=["dtcwt", "pixel", "fft"],
+        choices=["dtcwt", "pixel", "fft", "dwt"],
         help=(
             "Conditioning input mode (Q2 transform-swap ablation). "
             "'dtcwt' (default) feeds the DT-CWT decomposition of the LR. "
             "'pixel' feeds a 4-level avg-pool pyramid + learnable 6-dir conv. "
-            "'fft' feeds a 4-level pyramid + 6-wedge directional FFT "
-            "(fixed transform, no learnable params, parity with DT-CWT). "
+            "'fft' feeds a 4-level pyramid + 6-wedge directional FFT. "
+            "'dwt' feeds a 4-level real DWT (3 subbands zero-padded to 6, "
+            "imag=0). "
             "The frequency-separated loss path continues to use DT-CWT in "
             "all modes; only the conditioning input changes."
         ),
@@ -692,7 +693,7 @@ def parse_args(input_args=None):
     if args.proportion_empty_prompts < 0 or args.proportion_empty_prompts > 1:
         raise ValueError("`--proportion_empty_prompts` must be in the range [0, 1].")
 
-    if args.cond_mode in ("pixel", "fft") and not args.dual_sft:
+    if args.cond_mode in ("pixel", "fft", "dwt") and not args.dual_sft:
         raise ValueError(
             f"--cond_mode {args.cond_mode} requires --dual_sft. The "
             "conditioner is attached to FrequencyConditioningEncoder, "
@@ -1126,6 +1127,16 @@ def main(args):
                 "(fixed transform, 0 learnable params). "
                 "DT-CWT loss path remains active."
             )
+        elif args.cond_mode == "dwt":
+            from util.sft_utils import DWTPyramidConditioner
+            sft_adapter.pixel_cond_model = DWTPyramidConditioner(
+                num_levels=4, wave="db4", mode="zero",
+            )
+            logger.info(
+                "--cond_mode dwt: DWTPyramidConditioner attached "
+                "(real DWT, 3 subbands zero-padded to 6, imag=0, "
+                "0 learnable params). DT-CWT loss path remains active."
+            )
     else:
         logger.info(
             f"Legacy SFTAdapter feature_channels = {sft_feature_channels}"
@@ -1521,7 +1532,7 @@ def main(args):
                     # wrapped) encoder builds the (yh, yl) tuple. The loss
                     # path below still uses DT-CWT, isolating the
                     # conditioning effect of frequency decomposition.
-                    if args.cond_mode in ("pixel", "fft"):
+                    if args.cond_mode in ("pixel", "fft", "dwt"):
                         cond_dict = sft_adapter(lr=lq.float())
                         # debug_dual_sft_step still reports DT-CWT subband
                         # stats for parity with the dtcwt run. Compute them

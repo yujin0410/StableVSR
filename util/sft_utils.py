@@ -332,6 +332,47 @@ class FFTPyramidConditioner(nn.Module):
         return yl, yh
 
 
+class DWTPyramidConditioner(nn.Module):
+    """DWT-based directional conditioning matching DT-CWT output shape.
+
+    Q2 ablation: replaces DT-CWT with the standard (decimated, real-
+    valued) discrete wavelet transform. DWT produces 3 highpass subbands
+    per level (LH, HL, HH); we zero-pad to 6 along the subband dim and
+    set the imag axis to 0 so the resulting tensor matches DT-CWT's
+    ``[B, 3, 6, H_j, W_j, 2]`` shape exactly. PerLevelProcessor x4
+    encoder consumes it unchanged.
+
+    Trade-offs vs DT-CWT (these are exactly what this ablation isolates):
+      - Only 3 directional subbands (vs 6) -- weaker orientation cov.
+      - Decimated -> NOT shift-invariant.
+      - Real-valued -> no phase information (imag=0, sin_phi trivial).
+
+    Fixed transform; no learnable parameters.
+    """
+
+    def __init__(self, num_levels=4, wave="db4", mode="zero"):
+        super().__init__()
+        from pytorch_wavelets import DWTForward
+        self.num_levels = num_levels
+        self.dwt = DWTForward(J=num_levels, wave=wave, mode=mode)
+        for p in self.dwt.parameters():
+            p.requires_grad_(False)
+
+    def forward(self, lr):
+        lr = lr.float()
+        yl, yh_list = self.dwt(lr)
+        # yh_list[j]: [B, C, 3, H_j, W_j] in (LH, HL, HH) order
+        out = []
+        for yh_j in yh_list:
+            B, C, S, Hj, Wj = yh_j.shape
+            # zero-pad subband axis 3 -> 6
+            pad = torch.zeros(B, C, 6 - S, Hj, Wj, device=yh_j.device, dtype=yh_j.dtype)
+            real = torch.cat([yh_j, pad], dim=2)  # [B, C, 6, H_j, W_j]
+            imag = torch.zeros_like(real)
+            out.append(torch.stack([real, imag], dim=-1))  # [B, C, 6, H_j, W_j, 2]
+        return yl, out
+
+
 class UNetWithDualSFT(nn.Module):
     """Wrap a U-Net with dual SFT injection.
 
