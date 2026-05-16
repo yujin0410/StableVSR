@@ -34,10 +34,10 @@ accelerate launch --num_processes $NUM_PROCESSES --main_process_port 29503 train
  --output_dir=$OUTPUT_DIR \
  --dataset_config_path="/home/yjcho/StableVSR/dataset/config_reds.yaml" \
  --learning_rate=1e-4 \
- --validation_steps=500 \
+ --validation_steps=1000 \
  --train_batch_size=8 \
  --dataloader_num_workers=8 \
- --max_train_steps=5000 \
+ --max_train_steps=20000 \
  --enable_xformers_memory_efficient_attention \
  --dual_sft \
  --cond_mode=fft \
