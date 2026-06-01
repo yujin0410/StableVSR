@@ -136,12 +136,13 @@ def e1_vae_highfreq_loss(frames, vae, dtcwt_model, device) -> Dict:
     Returns mean relative L2 loss per DT-CWT level.
     """
     print("\n=== E1: VAE high-frequency loss ===")
+    vae_dtype = next(vae.parameters()).dtype
     per_level = {1: [], 2: [], 3: [], 4: []}
     for k in range(frames.shape[0]):
         lr = frames[k:k + 1].to(device).float() * 2 - 1
         hr = F.interpolate(lr, scale_factor=4, mode="bicubic", align_corners=False)
-        z = vae.encode(hr).latent_dist.sample() * vae.config.scaling_factor
-        hr_recon = vae.decode(z / vae.config.scaling_factor).sample
+        z = vae.encode(hr.to(vae_dtype)).latent_dist.sample() * vae.config.scaling_factor
+        hr_recon = vae.decode(z / vae.config.scaling_factor).sample.float()
         _, yh_orig = dtcwt_model(hr)
         _, yh_recon = dtcwt_model(hr_recon)
         for j, (ya, yb) in enumerate(zip(yh_orig, yh_recon)):
