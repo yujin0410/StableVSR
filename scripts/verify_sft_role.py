@@ -320,17 +320,13 @@ def e3_propagation_depth(
         z0 = vae.encode(lr_hr.to(weight_dtype)).latent_dist.sample() * vae.config.scaling_factor
         noise = torch.randn_like(z0)
         timesteps = torch.tensor([500], device=device, dtype=torch.long)
-        # Match train.py's input: concat latent with LR latent-equivalent.
-        # train.py uses [noisy_latent, lq] where lq is the LR image (not
-        # latent), broadcast to 4 channels via the original ControlNet
-        # input pipeline. To stay self-contained, we build a 4-channel LR
-        # latent surrogate by interpolating the LR image to the latent
-        # spatial size and channel-padding/projecting to 4 channels.
+        # Match train.py's input: noisy latent (4 ch) + LR image (3 ch) = 7 ch.
+        # The modified U-Net's conv_in expects this 7-channel layout.
+        # LR must be resampled to the latent spatial size for concat.
         lr_for_cat = F.interpolate(lr, size=z0.shape[-2:],
-                                   mode="bilinear", align_corners=False)
-        # Pad RGB (3 ch) -> 4 ch with a zero channel.
-        lr_pad = F.pad(lr_for_cat.to(weight_dtype), (0, 0, 0, 0, 0, 1))
-        noisy_cat = torch.cat([noise, lr_pad], dim=1)
+                                   mode="bilinear",
+                                   align_corners=False).to(weight_dtype)
+        noisy_cat = torch.cat([noise, lr_for_cat], dim=1)
 
         # ---- With SFT ----
         cap_w = FeatureCapture(unet)
@@ -440,7 +436,10 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device(args.device)
-    weight_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+    # Use fp32 throughout this diagnostic script. fp16 VAE round-trip in E1
+    # underflows on small LR patches and propagates NaN through DT-CWT.
+    # The script processes batch=1 small crops, so the memory cost is fine.
+    weight_dtype = torch.float32
 
     print("[init] loading models ...")
     encoder = load_encoder(args.ckpt, args.inject_high, args.inject_low, device)
