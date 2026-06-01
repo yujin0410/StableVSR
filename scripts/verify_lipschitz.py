@@ -55,6 +55,13 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
+# Allow `python scripts/verify_lipschitz.py` from the repo root by
+# prepending the repo root to sys.path. Required because `scripts/` is
+# not a package and Python only auto-adds the script's directory.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 # Repo modules — these live in the user's tree, not in this remote container.
 from util.sft_utils import FrequencyConditioningEncoder
 from util.frequency_utils import DTCWTForward
