@@ -145,6 +145,8 @@ class Vimeo90KRecurrentDataset(data.Dataset):
 
         # augmentation - flip, rotate
         img_lqs.extend(img_gts)
+        # contiguous float32 so basicsr's in-place cv2.flip accepts the arrays
+        img_lqs = [np.ascontiguousarray(v, dtype=np.float32) for v in img_lqs]
         img_results = augment(img_lqs, self.opt['use_hflip'], self.opt['use_rot'])
 
         img_results = img2tensor(img_results)

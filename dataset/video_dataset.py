@@ -122,6 +122,8 @@ class VideoClipRecurrentDataset(data.Dataset):
         img_gts, img_lqs = paired_random_crop(img_gts, img_lqs, gt_size, scale, clip_path)
 
         img_lqs.extend(img_gts)
+        # contiguous float32 so basicsr's in-place cv2.flip accepts the arrays
+        img_lqs = [np.ascontiguousarray(v, dtype=np.float32) for v in img_lqs]
         img_results = augment(img_lqs, self.opt['use_hflip'], self.opt['use_rot'])
         img_results = img2tensor(img_results)
         img_gts = torch.stack(img_results[len(img_results) // 2:], dim=0)
