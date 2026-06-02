@@ -1,0 +1,20 @@
+dataset:
+  train:
+    type: vimeo                 # selects Vimeo90KRecurrentDataset in train.py
+    # Root of the GT septuplet sequences: <dataroot_gt>/00001/0001/im1.png ...
+    dataroot_gt: /path/to/vimeo_septuplet/sequences/
+    # Precomputed LR root with the SAME tree (im1.png..im7.png at LR size).
+    # Leave empty/null to generate LR on-the-fly via bicubic downsampling.
+    dataroot_lq:
+    # Official split list, one sequence per line (e.g. "00001/0001").
+    meta_info_file: /path/to/vimeo_septuplet/sep_trainlist.txt
+    io_backend:
+      type: disk
+    num_frame: 3               # consecutive frames per sample (<= 7)
+    num_clip_frames: 7         # Vimeo septuplet = 7 frames per clip
+    interval_list: [1]
+    random_reverse: False
+    gt_size: 256
+    use_hflip: True
+    use_rot: False
+    scale: 4
