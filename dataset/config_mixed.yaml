@@ -28,13 +28,17 @@ dataset:
         random_reverse: False
 
       - name: youhq
-        type: youhq                       # on-the-fly mp4 decoding (decord)
+        type: youhq                       # extracted PNG frames (folder loader)
         ratio: 2
-        dataroot: /mnt/HDD_raid1/yjcho/data/YouHQ-Train/
-        # meta_info_file:                 # optional list of clip paths; else globs *.mp4
-        # max_clips: 4000                 # optional cap for quick runs
+        # point at the EXTRACTED frames root (see scripts/extract_youhq_frames.py),
+        # NOT the .mp4 tree. dataroot_lq omitted -> bicubic x4 LR on-the-fly.
+        dataroot: /mnt/HDD_raid1/yjcho/data/YouHQ-Train-frames/
+        meta_info_file: dataset/youhq_train_list.txt   # written by the extractor
+        # max_clips: 2000                 # optional cap for quick runs
         interval_list: [1]
         random_reverse: False
+        # To decode .mp4 on-the-fly instead of extracting, use `type: video`
+        # with `dataroot: <the .mp4 tree>` (requires decord).
 
       # - name: vimeo                     # optional 3rd source
       #   type: vimeo

@@ -33,9 +33,12 @@ def build_recurrent_dataset(opt):
     if 'vimeo' in dtype:
         from dataset.vimeo_dataset import Vimeo90KRecurrentDataset
         return Vimeo90KRecurrentDataset(opt)
-    if dtype in ('video', 'youhq', 'mp4'):
+    if dtype in ('video', 'mp4'):
         from dataset.video_dataset import VideoClipRecurrentDataset
         return VideoClipRecurrentDataset(opt)
+    if dtype in ('folder', 'frames', 'youhq'):
+        from dataset.folder_dataset import FolderRecurrentDataset
+        return FolderRecurrentDataset(opt)
     from dataset.reds_dataset import REDSRecurrentDataset
     return REDSRecurrentDataset(opt)
 
