@@ -1,0 +1,44 @@
+# Validation subset for checkpoint selection / optimal early stopping.
+#
+# Keep it SMALL (2-3 sequences per dataset) -- this runs full diffusion
+# inference per checkpoint, so a small subset keeps the sweep affordable while
+# still tracking the train/test domain trade-off.
+#
+# role:
+#   target    -> datasets we WANT to recover (drives the stopping objective)
+#   guardrail -> in-domain dataset that must not regress (REDS4)
+# weight: relative importance within its role group (optional, default 1.0)
+
+metric_weights:        # within each dataset, weighting of objective metrics
+  lpips: 1.0
+  dists: 1.0
+  tlpips: 1.0          # temporal consistency
+  tof: 1.0             # temporal flow error
+
+datasets:
+  reds4:
+    role: guardrail
+    weight: 1.0
+    lr:  /home/yjcho/Datasets/REDS4/test/bicubic
+    gt:  /home/yjcho/Datasets/REDS4/test/gt
+    seqs: ['000', '020']        # subset; omit to use all sequences
+
+  udm10:
+    role: target
+    weight: 1.0
+    lr:  /home/yjcho/Datasets/UDM10/bicubic
+    gt:  /home/yjcho/Datasets/UDM10/gt
+    seqs: ['archpeople', 'auditorium']
+
+  spmcs:
+    role: target
+    weight: 1.0
+    lr:  /home/yjcho/Datasets/SPMCS/bicubic
+    gt:  /home/yjcho/Datasets/SPMCS/gt
+    seqs: ['hdclub_003_001', 'hitachi_isee5_001']
+
+  # vid4:
+  #   role: target
+  #   lr:  /home/yjcho/Datasets/Vid4/bicubic
+  #   gt:  /home/yjcho/Datasets/Vid4/gt
+  #   seqs: ['calendar', 'city']
