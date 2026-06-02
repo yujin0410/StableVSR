@@ -788,19 +788,14 @@ def main(args):
 
     # train_dataset = make_train_dataset(args, tokenizer, accelerator)
     dataset_opts = OmegaConf.load(args.dataset_config_path)
-    train_opts = dataset_opts['dataset']['train']
-    # Select the dataset by an optional `type` field (defaults to REDS so that
-    # existing configs keep working unchanged).
-    dataset_type = str(
-        train_opts.get('type', dataset_opts['dataset'].get('type', 'reds'))
-    ).lower()
-    if 'vimeo' in dataset_type:
-        from dataset.vimeo_dataset import Vimeo90KRecurrentDataset
-        logger.info("Using Vimeo90KRecurrentDataset for training")
-        train_dataset = Vimeo90KRecurrentDataset(train_opts)
-    else:
-        logger.info("Using REDSRecurrentDataset for training")
-        train_dataset = REDSRecurrentDataset(train_opts)
+    from dataset.mixed_dataset import build_recurrent_dataset
+    train_opts = OmegaConf.to_container(dataset_opts['dataset']['train'], resolve=True)
+    # allow `type` to live on either dataset.train or dataset (defaults to REDS,
+    # so existing REDS configs keep working unchanged)
+    if 'type' not in train_opts and 'type' in dataset_opts['dataset']:
+        train_opts['type'] = OmegaConf.to_container(dataset_opts['dataset'], resolve=True)['type']
+    train_dataset = build_recurrent_dataset(train_opts)
+    logger.info(f"Train dataset: {type(train_dataset).__name__} ({len(train_dataset)} samples)")
 
 
     train_dataloader = torch.utils.data.DataLoader(

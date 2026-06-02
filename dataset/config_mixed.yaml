@@ -1,0 +1,49 @@
+dataset:
+  train:
+    type: mixed
+    # shared by ALL sources (batches must stack), so set once here
+    num_frame: 3
+    gt_size: 256
+    scale: 4
+    use_hflip: True
+    use_rot: False
+
+    # ratio = sampling probability (NOT dataset size). There is no standard
+    # REDS:Vimeo:YouHQ ratio in the literature -> sweep it with select_checkpoint.
+    # Recommended start: REDS-heavy so REDS strengths are retained.
+    sources:
+      - name: reds
+        type: reds
+        ratio: 2
+        dataroot_gt: /home/yjcho/Datasets/REDS/train/gt/
+        dataroot_lq: /home/yjcho/Datasets/REDS/train/bicubic/
+        dataroot_flow:
+        meta_info_file: /home/yjcho/StableVSR/dataset/REDS_train_metadata.txt
+        io_backend:
+          type: disk
+        val_partition: 'REDS4'
+        remove_partition: True
+        test_mode: False
+        interval_list: [1]
+        random_reverse: False
+
+      - name: youhq
+        type: youhq                       # on-the-fly mp4 decoding (decord)
+        ratio: 2
+        dataroot: /mnt/HDD_raid1/yjcho/data/YouHQ-Train/
+        # meta_info_file:                 # optional list of clip paths; else globs *.mp4
+        # max_clips: 4000                 # optional cap for quick runs
+        interval_list: [1]
+        random_reverse: False
+
+      # - name: vimeo                     # optional 3rd source
+      #   type: vimeo
+      #   ratio: 1
+      #   dataroot_gt: /home/yjcho/Datasets/vimeo_septuplet/sequences/
+      #   dataroot_lq:
+      #   meta_info_file: /home/yjcho/Datasets/vimeo_septuplet/sep_trainlist.txt
+      #   io_backend:
+      #     type: disk
+      #   num_clip_frames: 7
+      #   interval_list: [1]
+      #   random_reverse: False
