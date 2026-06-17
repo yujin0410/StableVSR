@@ -42,6 +42,7 @@ import argparse
 import numpy as np
 import cv2
 import torch
+import torch.nn.functional as F
 from pytorch_wavelets import DTCWTForward, DTCWTInverse
 from scipy.stats import pearsonr, spearmanr
 
@@ -49,6 +50,14 @@ try:
     import lpips as lpips_lib
 except Exception:  # pragma: no cover
     lpips_lib = None
+
+# optional optical-flow warping (fair, motion-compensated test)
+try:
+    from torchvision.models.optical_flow import raft_large, Raft_Large_Weights
+    from util.flow_utils import flow_warp, get_flow_forward_backward, detect_occlusion
+    _WARP_OK = True
+except Exception:  # pragma: no cover
+    _WARP_OK = False
 
 _IMG_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')
 EPS = 1e-8
@@ -92,7 +101,7 @@ def dtcwt_bands(xfm, luma):
     return Yl, out
 
 
-def pair_phase_incoherence(bands_t, bands_p, high_levels):
+def pair_phase_incoherence(bands_t, bands_p, high_levels, masks=None):
     """magnitude-weighted mean(1 - cos(dphi)) over high bands (scalar)."""
     num, den = 0.0, 0.0
     for j in high_levels:
@@ -100,12 +109,14 @@ def pair_phase_incoherence(bands_t, bands_p, high_levels):
         mp, rep, imp = bands_p[j]
         cosd = (ret * rep + imt * imp) / (mt * mp + EPS)   # cos(phi_t - phi_p)
         w = mt * mp
+        if masks is not None:
+            w = w * masks[j]
         num += (w * (1.0 - cosd)).sum().item()
         den += w.sum().item()
     return num / (den + EPS)
 
 
-def pair_mag_flicker(bands_t, bands_p, high_levels):
+def pair_mag_flicker(bands_t, bands_p, high_levels, masks=None):
     """scale-free magnitude change: weighted mean |mt-mp| / mean(mt,mp)."""
     num, den = 0.0, 0.0
     for j in high_levels:
@@ -114,6 +125,8 @@ def pair_mag_flicker(bands_t, bands_p, high_levels):
         avg = 0.5 * (mt + mp)
         rel = (mt - mp).abs() / (avg + EPS)
         w = avg
+        if masks is not None:
+            w = w * masks[j]
         num += (w * rel).sum().item()
         den += w.sum().item()
     return num / (den + EPS)
@@ -146,6 +159,30 @@ def psnr(a, b):
     return 99.0 if mse < 1e-12 else 10.0 * np.log10(1.0 / mse)
 
 
+def _pad8(x):
+    _, _, h, w = x.shape
+    ph, pw = (8 - h % 8) % 8, (8 - w % 8) % 8
+    return F.pad(x, (0, pw, 0, ph), mode='reflect'), (h, w)
+
+
+def warp_prev(of_model, cur_rgb, prev_rgb):
+    """Motion-compensate prev->cur. Returns (prev_warped_rgb, valid_mask (1,1,H,W))."""
+    h, w = cur_rgb.shape[-2:]
+    cur_p, _ = _pad8(cur_rgb * 2 - 1)
+    prev_p, _ = _pad8(prev_rgb * 2 - 1)
+    fw, bw = get_flow_forward_backward(of_model, cur_p, prev_p)  # (1,Hp,Wp,2)
+    fw, bw = fw[:, :h, :w, :], bw[:, :h, :w, :]
+    prev_warped = flow_warp(prev_rgb, fw, padding_mode='border')
+    occ = detect_occlusion(fw, bw)               # (1,H,W), 1=valid
+    mask = occ.unsqueeze(1)                       # (1,1,H,W)
+    return prev_warped, mask
+
+
+def _band_mask(mask, like):
+    """Downsample full-res valid mask to a band's spatial size."""
+    return F.adaptive_avg_pool2d(mask, like.shape[-2:]).unsqueeze(2)  # (1,1,1,Hj,Wj)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out_path', required=True, help='SR output frames (seq subfolders)')
@@ -155,6 +192,8 @@ def main():
     ap.add_argument('--max_seqs', type=int, default=0, help='cap sequences (0=all)')
     ap.add_argument('--swap_examples', type=int, default=2, help='save N phase-swap images')
     ap.add_argument('--save_dir', default='magphase_analysis')
+    ap.add_argument('--warp', action='store_true',
+                    help='motion-compensate prev via RAFT before measuring (FAIR test)')
     args = ap.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -164,6 +203,12 @@ def main():
     xfm = DTCWTForward(J=4, biort='near_sym_b', qshift='qshift_b').to(device)
     ifm = DTCWTInverse(biort='near_sym_b', qshift='qshift_b').to(device)
     lp = lpips_lib.LPIPS(net='alex').to(device) if lpips_lib is not None else None
+
+    of_model = None
+    if args.warp:
+        assert _WARP_OK, 'warp needs torchvision RAFT + util.flow_utils (run from repo root)'
+        of_model = raft_large(weights=Raft_Large_Weights.DEFAULT).to(device).eval()
+        of_model.requires_grad_(False)
 
     seqs = list_seqs(args.out_path)
     if args.max_seqs:
@@ -184,16 +229,27 @@ def main():
             rgb = load_rgb(of, device)
             luma = to_luma(rgb)
             _, bands = dtcwt_bands(xfm, luma)
-            if prev_bands is not None:
-                # (1) phase incoherence  &  (3) magnitude flicker  (output-only)
-                incoh = pair_phase_incoherence(bands, prev_bands, high_levels)
-                magf = pair_mag_flicker(bands, prev_bands, high_levels)
-                # perceptual flicker proxy (raw consecutive)
-                if lp is not None:
-                    with torch.no_grad():
-                        fl = lp(rgb * 2 - 1, prev_rgb * 2 - 1).item()
-                else:
-                    fl = torch.mean((rgb - prev_rgb) ** 2).item()
+            if prev_rgb is not None:
+                with torch.no_grad():
+                    if args.warp:
+                        # motion-compensate previous frame to current (FAIR test)
+                        prev_w_rgb, mask = warp_prev(of_model, rgb, prev_rgb)
+                        _, ref_bands = dtcwt_bands(xfm, to_luma(prev_w_rgb))
+                        masks = {j: _band_mask(mask, bands[j][0][0, 0, 0]) for j in high_levels}
+                        ref_rgb = prev_w_rgb
+                    else:
+                        ref_bands, masks, ref_rgb = prev_bands, None, prev_rgb
+                    # (1) phase incoherence  &  (3) magnitude flicker
+                    incoh = pair_phase_incoherence(bands, ref_bands, high_levels, masks)
+                    magf = pair_mag_flicker(bands, ref_bands, high_levels, masks)
+                    # perceptual flicker (warped if --warp)
+                    if lp is not None:
+                        a, b = rgb, ref_rgb
+                        if args.warp:
+                            a, b = rgb * mask, ref_rgb * mask
+                        fl = lp(a * 2 - 1, b * 2 - 1).item()
+                    else:
+                        fl = torch.mean((rgb - ref_rgb) ** 2).item()
                 incoh_list.append(incoh)
                 magflick_list.append(magf)
                 flick_list.append(fl)
@@ -229,7 +285,8 @@ def main():
         return pearsonr(a, b)[0], spearmanr(a, b)[0]
 
     print('\n==================  magnitude/phase duality diagnosis  ==================')
-    print(f'tag={args.tag}  pairs={len(flick_list)}  high_levels={high_levels}  device={device}')
+    print(f'tag={args.tag}  pairs={len(flick_list)}  high_levels={high_levels}  '
+          f'device={device}  warp={"ON (motion-compensated)" if args.warp else "OFF (raw consecutive)"}')
     print(f'mean phase-incoherence : {np.mean(incoh_list):.4f}' if incoh_list else 'no pairs')
     print(f'mean magnitude-flicker : {np.mean(magflick_list):.4f}' if magflick_list else '')
     print(f'mean perceptual-flicker: {np.mean(flick_list):.4f}' if flick_list else '')
