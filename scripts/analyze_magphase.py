@@ -36,8 +36,12 @@ across models/datasets is still informative.
 """
 
 import os
+import sys
 import glob
 import argparse
+
+# make repo root importable (so `util.flow_utils` works when run as scripts/...)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 import cv2
@@ -55,9 +59,9 @@ except Exception:  # pragma: no cover
 try:
     from torchvision.models.optical_flow import raft_large, Raft_Large_Weights
     from util.flow_utils import flow_warp, get_flow_forward_backward, detect_occlusion
-    _WARP_OK = True
-except Exception:  # pragma: no cover
-    _WARP_OK = False
+    _WARP_OK, _WARP_ERR = True, None
+except Exception as _e:  # pragma: no cover
+    _WARP_OK, _WARP_ERR = False, repr(_e)
 
 _IMG_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')
 EPS = 1e-8
@@ -206,7 +210,7 @@ def main():
 
     of_model = None
     if args.warp:
-        assert _WARP_OK, 'warp needs torchvision RAFT + util.flow_utils (run from repo root)'
+        assert _WARP_OK, f'warp import failed: {_WARP_ERR}'
         of_model = raft_large(weights=Raft_Large_Weights.DEFAULT).to(device).eval()
         of_model.requires_grad_(False)
 
