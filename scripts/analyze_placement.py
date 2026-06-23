@@ -160,7 +160,7 @@ def analyze_align_spectrum(args):
                     gcorr_gt_ref.append(pearson(grad_mag(yr), gg))
                     cham_ref.append(chamfer_edges(yr, yg))
                     sp_ref.append(rapsd(yr))
-                if nvis < args.save_vis:
+                if i == args.vis_frame and nvis < args.save_vis:
                     save_placement_vis(yo, yg, yr, f'{args.tag}_{seq}_{i}')
                     nvis += 1
 
@@ -253,7 +253,9 @@ def main():
     ap.add_argument('--max_seqs', type=int, default=0)
     ap.add_argument('--swap_examples', type=int, default=3)
     ap.add_argument('--save_vis', type=int, default=0,
-                    help='save N edge-overlay + Chamfer-heatmap visualizations')
+                    help='save vis for this many sequences')
+    ap.add_argument('--vis_frame', type=int, default=15,
+                    help='which frame index to visualize (avoid 0 = recurrent warmup)')
     args = ap.parse_args()
 
     if args.seed_dirs:
