@@ -99,12 +99,43 @@ def rapsd(y):
     return prof[:min(cy, cx)]
 
 
+def save_placement_vis(yo, yg, yr, prefix):
+    """Edge overlay (GT=green, model=red -> overlap=yellow) + Chamfer heatmap."""
+    def edges(y):
+        return cv2.Canny((y * 255).astype(np.uint8), 80, 160) > 0
+    eg = edges(yg)
+    H, W = yg.shape
+    dt = distance_transform_edt(~eg)            # dist to nearest GT edge
+
+    def overlay(em):
+        img = np.zeros((H, W, 3), np.uint8)
+        img[..., 1] = eg.astype(np.uint8) * 255     # GT  -> green (G)
+        img[..., 2] = em.astype(np.uint8) * 255     # model -> red (R); overlap=yellow
+        return img
+
+    def heat(em):
+        h = np.zeros((H, W), np.float32)
+        h[em] = np.clip(dt[em], 0, 10)              # 0..10 px
+        hm = cv2.applyColorMap((h / 10 * 255).astype(np.uint8), cv2.COLORMAP_JET)
+        hm[~em] = 0                                  # show only model-edge pixels
+        return hm
+
+    eo = edges(yo)
+    cv2.imwrite(f'{prefix}_overlay_ours.png', overlay(eo))
+    cv2.imwrite(f'{prefix}_chamfer_ours.png', heat(eo))
+    if yr is not None:
+        er = edges(yr)
+        cv2.imwrite(f'{prefix}_overlay_ref.png', overlay(er))
+        cv2.imwrite(f'{prefix}_chamfer_ref.png', heat(er))
+
+
 def analyze_align_spectrum(args):
     oseqs = seqs_of(args.out_path)
     if args.max_seqs:
         oseqs = oseqs[:args.max_seqs]
     gcorr_gt, gcorr_lr, gcorr_gt_ref, cham, cham_ref = [], [], [], [], []
     sp_out, sp_gt, sp_ref = [], [], []
+    nvis = 0
     for seq in oseqs:
         ofs = frames_of(os.path.join(args.out_path, seq))
         gdir = os.path.join(args.gt_path, seq) if args.gt_path else None
@@ -123,11 +154,15 @@ def analyze_align_spectrum(args):
                 if lfs and i < len(lfs):
                     yl = luma(lfs[i], like=yo.shape)
                     gcorr_lr.append(pearson(go, grad_mag(yl)))
+                yr = None
                 if rfs and i < len(rfs):
                     yr = luma(rfs[i], like=yo.shape)
                     gcorr_gt_ref.append(pearson(grad_mag(yr), gg))
                     cham_ref.append(chamfer_edges(yr, yg))
                     sp_ref.append(rapsd(yr))
+                if nvis < args.save_vis:
+                    save_placement_vis(yo, yg, yr, f'{args.tag}_{seq}_{i}')
+                    nvis += 1
 
     print('\n===============  placement / structure alignment  ===============')
     print(f'tag={args.tag}  frames={len(sp_out)}')
@@ -161,6 +196,10 @@ def analyze_align_spectrum(args):
         out_png = f'{args.tag}_rapsd.png'
         plt.savefig(out_png, dpi=130)
         print(f'(2) power spectrum saved -> {out_png}')
+    if args.save_vis:
+        print(f'    edge-overlay + Chamfer-heatmap saved: {args.tag}_*_overlay_*.png / *_chamfer_*.png')
+        print('    overlay: GREEN=GT edge, RED=model edge, YELLOW=aligned (more yellow=better placement)')
+        print('    chamfer: model-edge pixels colored by distance to GT edge (BLUE=close, RED=far)')
     print('=================================================================\n')
 
 
@@ -213,6 +252,8 @@ def main():
     ap.add_argument('--tag', default='model')
     ap.add_argument('--max_seqs', type=int, default=0)
     ap.add_argument('--swap_examples', type=int, default=3)
+    ap.add_argument('--save_vis', type=int, default=0,
+                    help='save N edge-overlay + Chamfer-heatmap visualizations')
     args = ap.parse_args()
 
     if args.seed_dirs:
