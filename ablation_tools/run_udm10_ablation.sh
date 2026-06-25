@@ -20,7 +20,7 @@ OUT=$BASE/ablation_udm10
 mkdir -p "$OUT"
 export FLOW_CACHE_DIR="$OUT/flow_cache"                     # shared across all 4 variants
 
-GPU=0   # single GPU; all sequences in one shard
+GPU=1   # single GPU; all sequences in one shard
 
 run () {  # $1 = variant name, $2 $3 = ablation flags
   echo "=== variant: $1  (flags: $2 $3) ==="
