@@ -78,6 +78,15 @@ for seq in seqs:
             gt = tt(Image.open(os.path.join(gt_path, seq, im_gt))).unsqueeze(0).to(device)
             rec = tt(Image.open(os.path.join(rec_path, seq, im_rec))).unsqueeze(0).to(device)
 
+            # Match repo eval.py: if SR and GT differ in size (e.g. UDM10
+            # where pipeline rounding yields 1264 vs GT 1272), crop both to
+            # the common top-left region (no resize -> no misalignment).
+            if gt.shape[-2:] != rec.shape[-2:]:
+                h = min(gt.shape[-2], rec.shape[-2])
+                w = min(gt.shape[-1], rec.shape[-1])
+                gt = gt[..., :h, :w]
+                rec = rec[..., :h, :w]
+
             psnr_value = psnr(gt, rec)
             ssim_value = ssim(gt, rec)
             lpips_value = lpips(gt, rec)
