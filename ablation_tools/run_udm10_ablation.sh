@@ -20,19 +20,18 @@ OUT=$BASE/ablation_udm10
 mkdir -p "$OUT"
 export FLOW_CACHE_DIR="$OUT/flow_cache"                     # shared across all 4 variants
 
+GPU=0   # single GPU; all sequences in one shard
+
 run () {  # $1 = variant name, $2 $3 = ablation flags
   echo "=== variant: $1  (flags: $2 $3) ==="
-  for SID in 0 1; do
-    CUDA_VISIBLE_DEVICES=$SID python test.py \
-      --in_path  "$UDM10_LR" \
-      --out_path "$OUT/$1/" \
-      --controlnet_ckpt "$CKPT" \
-      --sft_ckpt "$CKPT/sft_adapter.bin" \
-      --dual_sft \
-      --num_shards 2 --shard_id $SID \
-      --num_inference_steps 50  $2 $3  &
-  done
-  wait
+  CUDA_VISIBLE_DEVICES=$GPU python test.py \
+    --in_path  "$UDM10_LR" \
+    --out_path "$OUT/$1/" \
+    --controlnet_ckpt "$CKPT" \
+    --sft_ckpt "$CKPT/sft_adapter.bin" \
+    --dual_sft \
+    --num_shards 1 --shard_id 0 \
+    --num_inference_steps 50  $2 $3
 }
 
 # Run `full` FIRST so it populates the flow cache for the other three.
