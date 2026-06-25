@@ -25,6 +25,8 @@ from tqdm import tqdm
 import torch
 from PIL import Image
 from torchvision.transforms import ToTensor
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from util.flow_utils import get_flow
 import argparse
 import warnings
