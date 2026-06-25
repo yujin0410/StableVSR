@@ -10,11 +10,14 @@
 # Edit the 4 paths below, then: bash ablation_tools/run_udm10_ablation.sh
 set -e
 
+# All generated frames, flow cache, and eval logs go under HDD (home has no space).
+BASE=/mnt/HDD_raid1/yjcho/20260430
 CKPT=experiments/20260430_dualsft/checkpoint-20000
 UDM10_LR=/mnt/HDD_raid1/yjcho/data/UDM10/test/bicubic       # <-- UDM10 LR frames
 UDM10_GT=/mnt/HDD_raid1/yjcho/data/UDM10/test/gt            # <-- UDM10 GT frames
-OUT=/mnt/HDD_raid1/yjcho/20260430/ablation_udm10
+OUT=$BASE/ablation_udm10
 
+mkdir -p "$OUT"
 export FLOW_CACHE_DIR="$OUT/flow_cache"                     # shared across all 4 variants
 
 run () {  # $1 = variant name, $2 $3 = ablation flags
@@ -42,7 +45,7 @@ echo "=== evaluating (per-sequence breakdown) ==="
 for v in full no_high no_low no_both; do
   echo "----- $v -----"
   python ablation_tools/eval_per_seq.py --out_path "$OUT/$v" --gt_path "$UDM10_GT" \
-    | tee "eval_udm10_${v}.txt"
+    | tee "$OUT/eval_udm10_${v}.txt"
 done
 
 echo "Done. Compare tLPIPS across full vs no_high to judge OOD anchoring."
