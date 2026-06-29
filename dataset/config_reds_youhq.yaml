@@ -1,0 +1,36 @@
+# REDS + YouHQ mixed training (dual-SFT fine-tune for OOD generalization).
+# YouHQ adds high-quality, diverse content so the frequency conditioning learns
+# less REDS-specific detail. REDS is kept in the blend to avoid forgetting.
+#
+# VERIFY the REDS paths below against your working dataset/config_reds.yaml
+# (the LR may live under .../bicubic/X4 per train_dual.sh's validation paths).
+dataset:
+  train:
+    type: mixed
+    num_frame: 3
+    gt_size: 256
+    scale: 4
+    use_hflip: true
+    use_rot: false
+    sources:
+      - type: reds
+        ratio: 1.0
+        dataroot_gt: /mnt/HDD_raid1/yjcho/data/REDS/train/gt          # <-- VERIFY
+        dataroot_lq: /mnt/HDD_raid1/yjcho/data/REDS/train/bicubic/X4  # <-- VERIFY (train_dual used /X4)
+        meta_info_file: /home/yjcho/StableVSR/dataset/REDS_train_metadata.txt
+        dataroot_flow:
+        io_backend:
+          type: disk
+        interval_list: [1]
+        random_reverse: false
+        val_partition: REDS4
+        test_mode: false
+        remove_partition: true
+      - type: youhq
+        ratio: 1.0
+        dataroot: /mnt/HDD_raid1/yjcho/data/YouHQ-Train-frames
+        dataroot_lq:           # empty -> on-the-fly bicubic x4 (matches benchmark degradation)
+        io_backend:
+          type: disk
+        interval_list: [1]
+        random_reverse: false
